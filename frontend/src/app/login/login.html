@@ -1,0 +1,50 @@
+<div class="login-container">
+
+  <!-- VISTA 1: Formulario (solo visible si NO está autenticado) -->
+  <div *ngIf="!isMsalLoggedIn">
+    <h2>Iniciar Sesión</h2>
+
+    <form (ngSubmit)="onSubmit()">
+      <div>
+        <label>Usuario:</label>
+        <input type="text" [(ngModel)]="username" name="username" required>
+      </div>
+      <div>
+        <label>Contraseña:</label>
+        <input type="password" [(ngModel)]="password" name="password" required>
+      </div>
+      <button type="submit">Ingresar</button>
+    </form>
+
+    <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
+
+    <hr>
+
+    <div class="msal-login">
+      <p>O inicia sesión con Microsoft Entra ID:</p>
+      <button type="button" (click)="loginWithMsal()">
+        Iniciar sesión con Microsoft
+      </button>
+    </div>
+  </div>
+
+  <!-- VISTA 2: Bienvenida (solo visible si YA está autenticado) -->
+  <div *ngIf="isMsalLoggedIn" class="msal-welcome">
+    <h2>¡Bienvenido/a!</h2>
+    <p><strong>{{ msalUserName }}</strong></p>
+
+    <button type="button" (click)="obtenerToken()">
+      Obtener token (debug)
+    </button>
+
+    <button type="button" (click)="logoutWithMsal()">
+      Cerrar sesión
+    </button>
+
+    <div *ngIf="debugToken" style="margin-top: 1rem;">
+      <label>Token (selecciona todo y copia):</label>
+      <textarea readonly rows="6" style="width: 100%;">{{ debugToken }}</textarea>
+    </div>
+  </div>
+
+</div>

@@ -2,22 +2,22 @@ spring:
   cloud:
     gateway:
       routes:
-        - id: bbf-service
-          uri: lb://microservices-bbf
-          predicates:
-            - Path=/**
-            
         - id: inventory-service
           uri: lb://microservices-inventory
           predicates:
-            - Path=/**
-            
+            - Path=/api/inventory/**
+
         - id: order-service
           uri: lb://microservices-order
           predicates:
-            - Path=/**
-            
+            - Path=/api/orders/**
+
         - id: shipment-service
           uri: lb://microservices-shipment
+          predicates:
+            - Path=/api/shipments/**
+
+        - id: bff-service
+          uri: lb://microservices-bff
           predicates:
             - Path=/**

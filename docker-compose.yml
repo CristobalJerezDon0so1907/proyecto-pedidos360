@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  order-db:
+    image: mysql:8.0
+    container_name: order-db
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: db_orders
+
+  inventory-db:
+    image: mysql:8.0
+    container_name: inventory-db
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: db_inventory
+
+  shipment-db:
+    image: mysql:8.0
+    container_name: shipment-db
+    ports:
+      - "3309:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: db_shipment
+
+  payment-db:
+    image: mysql:8.0
+    container_name: payment-db
+    ports:
+      - "3310:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: db_payment
+
+  order-service:
+    build: ./backend/order
+    container_name: order-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://order-db:3306/db_orders?allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - order-db
+      - rabbitmq
+
+  inventory-service:
+    build: ./backend/inventory
+    container_name: inventory-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://inventory-db:3306/db_inventory?allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - inventory-db
+      - rabbitmq
+
+  shipment-service:
+    build: ./backend/shipment
+    container_name: shipment-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://shipment-db:3306/db_shipment?allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - shipment-db
+      - rabbitmq
+
+  payment-service:
+    build: ./backend/payment
+    container_name: payment-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://payment-db:3306/db_payment?allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - payment-db
+      - rabbitmq
+
+  bff-service:
+    build: ./bff
+    container_name: bff-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - order-service
+      - inventory-service
+      - shipment-service
+      - payment-service

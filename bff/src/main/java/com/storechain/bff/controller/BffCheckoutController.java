@@ -1,7 +1,7 @@
 package com.storechain.bff.controller;
 
 import com.storechain.bff.dto.CheckoutRequest;
-import com.storechain.bff.service.BffOrchestrationService;
+import com.storechain.bff.services.BffOrchestrationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;

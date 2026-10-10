@@ -1,4 +1,4 @@
-package com.storechain.bff.service;
+package com.storechain.bff.services;
 
 import com.storechain.bff.dto.CheckoutRequest;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -44,7 +44,7 @@ public class BffOrchestrationService {
                             .bodyToMono(Map.class);
                 })
                 .flatMap(orderResult -> {
-                    // 3. Crear EnvÃo / Despacho en el microservicio de Shipments
+                    // 3. Crear Envío / Despacho en el microservicio de Shipments
                     Map<String, Object> shipmentPayload = new HashMap<>();
                     shipmentPayload.put("orderId", orderResult.get("id"));
                     shipmentPayload.put("address", request.getShippingAddress());

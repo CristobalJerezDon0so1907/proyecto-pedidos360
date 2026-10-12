@@ -1,0 +1,12 @@
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+        retry:
+          enabled: true
+          initial-interval: 1000   # 1 segundo
+          max-interval: 10000      # 10 segundos máximo
+          multiplier: 2.0          # Duplica el tiempo por intento
+          max-attempts: 3          # 3 intentos en total

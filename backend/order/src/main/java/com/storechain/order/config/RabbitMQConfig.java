@@ -4,71 +4,57 @@ import org.springframework.amqp.core.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Configuration
 public class RabbitMQConfig {
 
-    public static final String EXCHANGE = "orders_direct_exchange";
-    public static final String EXCHANGE_NAME = "orders_direct_exchange";
-    public static final String QUEUE_ALL = "all_orders_queue";
-    public static final String QUEUE_CRITICAL = "critical_orders_queue";
+    public static final String EXCHANGE_NAME = "orders.exchange";
+    public static final String DLX_NAME = "orders.dlx";
+    public static final String DLQ_NAME = "orders.dlq";
+    public static final String QUEUE_INVENTORY = "inventory.queue";
 
-    // DLX y DLQ
-    public static final String DLX_EXCHANGE = "orders.dlx";
-    public static final String DLQ_QUEUE = "orders.dlq";
-    public static final String DLX_ROUTING_KEY = "orders.dead";
-
+    // 1. Declarar el Exchange Principal
     @Bean
-    public DirectExchange exchange() {
-        return new DirectExchange(EXCHANGE_NAME);
+    public TopicExchange mainExchange() {
+        return new TopicExchange(EXCHANGE_NAME);
     }
 
+    // 2. Declarar el Dead Letter Exchange (DLX)
     @Bean
-    public FanoutExchange deadLetterExchange() {
-        return new FanoutExchange(DLX_EXCHANGE, true, false);
+    public DirectExchange deadLetterExchange() {
+        return new DirectExchange(DLX_NAME);
     }
 
+    // 3. Declarar la Dead Letter Queue (DLQ)
     @Bean
     public Queue deadLetterQueue() {
-        return QueueBuilder.durable(DLQ_QUEUE)
-                .withArgument("x-message-ttl", 86400000) // 24 horas
-                .build();
+        return QueueBuilder.durable(DLQ_NAME).build();
+    }
+
+    // 4. Enlazar la DLQ con el DLX
+    @Bean
+    public Binding dlqBinding() {
+        return BindingBuilder.bind(deadLetterQueue())
+                .to(deadLetterExchange())
+                .with("deadLetter");
+    }
+
+    // 5. Declarar la cola principal con redirección hacia el DLX
+    @Bean
+    public Queue inventoryQueue() {
+        Map<String, Object> args = new HashMap<>();
+        args.put("x-dead-letter-exchange", DLX_NAME);
+        args.put("x-dead-letter-routing-key", "deadLetter");
+        args.put("x-message-ttl", 30000); // 30 segundos TTL
+        return new Queue(QUEUE_INVENTORY, true, false, false, args);
     }
 
     @Bean
-    public Binding deadLetterBinding(Queue deadLetterQueue, FanoutExchange deadLetterExchange) {
-        return BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange);
-    }
-
-    @Bean
-    public Queue allOrdersQueue() {
-        return QueueBuilder.durable(QUEUE_ALL)
-                .withArgument("x-message-ttl", 30000) // TTL 30 segundos
-                .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", DLX_ROUTING_KEY)
-                .build();
-    }
-
-    @Bean
-    public Queue criticalOrdersQueue() {
-        return QueueBuilder.durable(QUEUE_CRITICAL)
-                .withArgument("x-message-ttl", 30000) // TTL 30 segundos
-                .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", DLX_ROUTING_KEY)
-                .build();
-    }
-
-    @Bean
-    public Binding bindingAllInfo(Queue allOrdersQueue, DirectExchange exchange) {
-        return BindingBuilder.bind(allOrdersQueue).to(exchange).with("INFO");
-    }
-
-    @Bean
-    public Binding bindingAllError(Queue allOrdersQueue, DirectExchange exchange) {
-        return BindingBuilder.bind(allOrdersQueue).to(exchange).with("ERROR");
-    }
-
-    @Bean
-    public Binding bindingCriticalError(Queue criticalOrdersQueue, DirectExchange exchange) {
-        return BindingBuilder.bind(criticalOrdersQueue).to(exchange).with("ERROR");
+    public Binding inventoryBinding() {
+        return BindingBuilder.bind(inventoryQueue())
+                .to(mainExchange())
+                .with("INFO");
     }
 }

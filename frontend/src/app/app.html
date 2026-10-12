@@ -1,27 +1,38 @@
-<div style="max-width: 500px; margin: 2rem auto; font-family: Arial, sans-serif; padding: 1.5rem; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-  <h2 style="text-align: center; color: #333;">Consola de Envíos RabbitMQ</h2>
+<div class="container">
+  <h2>Consola de Envíos RabbitMQ</h2>
 
-  <div style="margin-bottom: 1rem;">
-    <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Tipo / Severidad:</label>
-    <select #levelSelect style="width: 100%; padding: 0.5rem; font-size: 1rem; border-radius: 4px; border: 1px solid #ccc;">
+  <!-- Panel de Tarjetas de Métricas -->
+  <div class="stats-panel">
+    <div class="stat-card">
+      <div class="stat-number">{{ stats.total }}</div>
+      <div class="stat-label">Total Órdenes</div>
+    </div>
+    <div class="stat-card success">
+      <div class="stat-number">{{ stats.success }}</div>
+      <div class="stat-label">Procesadas</div>
+    </div>
+    <div class="stat-card error">
+      <div class="stat-number">{{ stats.failed }}</div>
+      <div class="stat-label">En DLQ</div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Tipo / Severidad:</label>
+    <select [(ngModel)]="selectedType">
       <option value="INFO">INFO (Éxito - Canal General)</option>
-      <option value="ERROR">ERROR (Crítico - Canal Alertas)</option>
       <option value="FAIL">FAIL (Error Simulado -> DLQ)</option>
     </select>
   </div>
 
-  <div style="margin-bottom: 1rem;">
-    <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Mensaje del Pedido:</label>
-    <input #messageInput type="text" value="Pedido registrado desde Angular" style="width: 100%; padding: 0.5rem; font-size: 1rem; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box;" />
+  <div class="form-group">
+    <label>Mensaje del Pedido:</label>
+    <input type="text" [(ngModel)]="messageText" />
   </div>
 
-  <button (click)="enviarMensaje(levelSelect.value, messageInput.value)" style="width: 100%; padding: 0.75rem; background-color: #007bff; color: white; border: none; font-size: 1rem; font-weight: bold; border-radius: 4px; cursor: pointer;">
-    Ejecutar
-  </button>
+  <button (click)="executeSend()" class="btn-primary">Ejecutar</button>
 
-  @if (respuesta) {
-    <div style="margin-top: 1rem; padding: 0.75rem; background-color: #e8f5e9; color: #2e7d32; border-radius: 4px; font-weight: bold;">
-      {{ respuesta }}
-    </div>
-  }
+  <div *ngIf="statusMessage" class="alert-box">
+    {{ statusMessage }}
+  </div>
 </div>

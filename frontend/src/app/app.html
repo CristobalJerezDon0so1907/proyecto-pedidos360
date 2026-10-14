@@ -1,38 +1,104 @@
-<div class="container">
-  <h2>Consola de Envíos RabbitMQ</h2>
+<div class="dashboard-container">
+  
+  <!-- Barra Superior con Badge de Clúster -->
+  <header class="top-navbar">
+    <div class="brand-wrapper">
+      <div class="brand-icon">🐇</div>
+      <div class="brand-info">
+        <h1>Pedidos360 Broker Console</h1>
+        <p>Control de Mensajería Asíncrona & Aprovisionamiento AMQP</p>
+      </div>
+    </div>
+    <div class="cluster-pill">
+      <span class="pulse-dot"></span>
+      RabbitMQ Cluster 2-Nodes (Online)
+    </div>
+  </header>
 
-  <!-- Panel de Tarjetas de Métricas -->
-  <div class="stats-panel">
+  <!-- Tarjetas de Métricas -->
+  <section class="stats-panel">
     <div class="stat-card">
       <div class="stat-number">{{ stats.total }}</div>
-      <div class="stat-label">Total Órdenes</div>
+      <div class="stat-label">Total Órdenes Registradas</div>
     </div>
     <div class="stat-card success">
       <div class="stat-number">{{ stats.success }}</div>
-      <div class="stat-label">Procesadas</div>
+      <div class="stat-label">Mensajes Procesados</div>
     </div>
     <div class="stat-card error">
       <div class="stat-number">{{ stats.failed }}</div>
-      <div class="stat-label">En DLQ</div>
+      <div class="stat-label">Enrutados a DLQ</div>
     </div>
-  </div>
+  </section>
 
-  <div class="form-group">
-    <label>Tipo / Severidad:</label>
-    <select [(ngModel)]="selectedType">
-      <option value="INFO">INFO (Éxito - Canal General)</option>
-      <option value="FAIL">FAIL (Error Simulado -> DLQ)</option>
-    </select>
-  </div>
+  <!-- Paneles Principales: 2 Columnas -->
+  <div class="main-grid">
+    
+    <!-- Módulo 1: Emisor de Pedidos / Eventos -->
+    <section class="module-card">
+      <div class="module-header">
+        <span>🚀</span>
+        <h2>Emisor de Pedidos & Routing</h2>
+      </div>
 
-  <div class="form-group">
-    <label>Mensaje del Pedido:</label>
-    <input type="text" [(ngModel)]="messageText" />
-  </div>
+      <div class="form-group">
+        <label>Canal / Severidad de la Orden:</label>
+        <select [(ngModel)]="selectedType">
+          <option value="INFO">INFO (Éxito - Flujo Estándar)</option>
+          <option value="FAIL">FAIL (Simular Error -> Directo a DLQ)</option>
+        </select>
+      </div>
 
-  <button (click)="executeSend()" class="btn-primary">Ejecutar</button>
+      <div class="form-group">
+        <label>Payload / Mensaje del Pedido:</label>
+        <input type="text" [(ngModel)]="messageText" placeholder="Ej: Pedido #9021 cliente corporativo" />
+      </div>
 
-  <div *ngIf="statusMessage" class="alert-box">
-    {{ statusMessage }}
+      <button (click)="executeSend()" class="btn-primary">
+        Publicar en RabbitMQ
+      </button>
+
+      <div *ngIf="statusMessage" class="alert-box" [ngClass]="selectedType === 'FAIL' ? 'error' : 'success'">
+        {{ statusMessage }}
+      </div>
+    </section>
+
+    <!-- Módulo 2: Administrador Dinámico de Colas -->
+    <section class="module-card">
+      <div class="module-header">
+        <span>⚙️</span>
+        <h2>Administrador de Colas (AMQP)</h2>
+      </div>
+
+      <div class="form-group">
+        <label>Nombre de la Nueva Cola:</label>
+        <input type="text" [(ngModel)]="newQueueName" placeholder="Ej: cola_auditoria_pedidos" />
+      </div>
+
+      <div class="checkbox-field">
+        <input type="checkbox" id="durableCheck" [(ngModel)]="isDurable" />
+        <label for="durableCheck">Durable (Persistencia en disco ante reinicios)</label>
+      </div>
+
+      <button (click)="createQueue()" class="btn-primary btn-create">
+        Aprovisionar Cola vía API
+      </button>
+
+      <div *ngIf="adminStatusMessage" class="alert-box" [ngClass]="isAdminError ? 'error' : 'success'">
+        {{ adminStatusMessage }}
+      </div>
+
+      <!-- Lista de Colas -->
+      <div class="queue-list-section">
+        <h3>Colas Gestionadas en Sesión</h3>
+        <div *ngFor="let q of managedQueues" class="queue-item">
+          <span class="queue-badge">{{ q }}</span>
+          <button (click)="deleteQueue(q)" class="btn-delete">
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </section>
+
   </div>
 </div>

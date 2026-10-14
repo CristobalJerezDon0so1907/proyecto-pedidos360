@@ -21,6 +21,15 @@ export class AppComponent {
     failed: 0
   };
 
+  // --- Propiedades para Administrador de Colas ---
+  newQueueName: string = '';
+  isDurable: boolean = true;
+  adminStatusMessage: string = '';
+  isAdminError: boolean = false;
+  managedQueues: string[] = ['cola_auditoria_pedidos'];
+
+  private readonly adminApiUrl = 'http://localhost:8081/api/admin/queues';
+
   constructor(private http: HttpClient) {}
 
   executeSend() {
@@ -31,7 +40,6 @@ export class AppComponent {
 
     this.stats.total++;
 
-    // Se corrige la URL de http://localhost:8081/orders a http://localhost:8081/api/orders
     this.http.post<any>('http://localhost:8081/api/orders', payload).subscribe({
       next: (res) => {
         if (this.selectedType === 'FAIL') {
@@ -45,6 +53,50 @@ export class AppComponent {
       error: (err) => {
         this.stats.failed++;
         this.statusMessage = 'Error de conexión con order-service';
+      }
+    });
+  }
+
+  // --- Acciones de Administración de RabbitMQ ---
+  createQueue() {
+    if (!this.newQueueName.trim()) {
+      this.adminStatusMessage = 'Error 400: El nombre de la cola no puede estar vacío';
+      this.isAdminError = true;
+      return;
+    }
+
+    const payload = {
+      name: this.newQueueName.trim(),
+      durable: this.isDurable,
+      autoDelete: false
+    };
+
+    this.http.post<any>(this.adminApiUrl, payload).subscribe({
+      next: (res) => {
+        this.isAdminError = false;
+        this.adminStatusMessage = `Éxito: ${res.message || 'Cola creada'} (${res.queueName})`;
+        if (!this.managedQueues.includes(res.queueName)) {
+          this.managedQueues.push(res.queueName);
+        }
+        this.newQueueName = '';
+      },
+      error: (err) => {
+        this.isAdminError = true;
+        this.adminStatusMessage = `Error ${err.status}: ${err.error?.message || 'Fallo al crear la cola'}`;
+      }
+    });
+  }
+
+  deleteQueue(queueName: string) {
+    this.http.delete<any>(`${this.adminApiUrl}/${queueName}`).subscribe({
+      next: (res) => {
+        this.isAdminError = false;
+        this.adminStatusMessage = `Éxito: ${res.message || 'Cola eliminada'}`;
+        this.managedQueues = this.managedQueues.filter((q) => q !== queueName);
+      },
+      error: (err) => {
+        this.isAdminError = true;
+        this.adminStatusMessage = `Error ${err.status}: ${err.error?.message || 'Fallo al eliminar la cola'}`;
       }
     });
   }

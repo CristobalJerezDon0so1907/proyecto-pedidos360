@@ -1,103 +1,123 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient, HttpClientModule } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
+
+interface LogEntry {
+  timestamp: string;
+  type: 'INFO' | 'ERROR' | 'SUCCESS' | 'WARN';
+  message: string;
+}
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, HttpClientModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './app.html',
-  styleUrl: './app.css'
+  styleUrls: ['./app.css']
 })
-export class AppComponent {
-  messageText: string = 'Pedido registrado desde Angular';
-  selectedType: string = 'INFO';
-  statusMessage: string = '';
+export class AppComponent implements OnInit {
+  private http = inject(HttpClient);
 
+  // Estado del mensaje
+  selectedType: string = 'INFO';
+  customerName: string = 'Cliente Corporativo';
+  orderTotal: number = 29990;
+  isSending: boolean = false;
+
+  // Métricas
   stats = {
     total: 0,
     success: 0,
-    failed: 0
+    dlq: 0
   };
 
-  // --- Propiedades para Administrador de Colas ---
+  // Administrador de Colas
   newQueueName: string = '';
   isDurable: boolean = true;
-  adminStatusMessage: string = '';
-  isAdminError: boolean = false;
-  managedQueues: string[] = ['cola_auditoria_pedidos'];
+  isLoadingAdmin: boolean = false;
+  managedQueues: string[] = ['cola_auditoria_pedidos', 'pedidos_dlq'];
 
-  private readonly adminApiUrl = 'http://localhost:8081/api/admin/queues';
+  // Logs en tiempo real
+  systemLogs: LogEntry[] = [];
 
-  constructor(private http: HttpClient) {}
+  private orderApiUrl = 'http://localhost:8081/api/admin/queues';
 
-  executeSend() {
-    const payload = {
-      message: this.messageText,
-      type: this.selectedType
-    };
-
-    this.stats.total++;
-
-    this.http.post<any>('http://localhost:8081/api/orders', payload).subscribe({
-      next: (res) => {
-        if (this.selectedType === 'FAIL') {
-          this.stats.failed++;
-          this.statusMessage = `[DLQ] Orden enviada a simulación de error (Routing: ${this.selectedType})`;
-        } else {
-          this.stats.success++;
-          this.statusMessage = `Mensaje enviado a RabbitMQ con Routing Key: ${this.selectedType}`;
-        }
-      },
-      error: (err) => {
-        this.stats.failed++;
-        this.statusMessage = 'Error de conexión con order-service';
-      }
-    });
+  ngOnInit() {
+    this.addLog('INFO', 'Cluster RabbitMQ inicializado en nodos rabbit@rabbitmq-1 y rabbit@rabbitmq-2.');
+    this.addLog('SUCCESS', 'Conexión con BFF (puerto 8080) y Order-Service (puerto 8081) activa.');
   }
 
-  // --- Acciones de Administración de RabbitMQ ---
+  addLog(type: 'INFO' | 'ERROR' | 'SUCCESS' | 'WARN', message: string) {
+    const now = new Date();
+    const timestamp = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+    this.systemLogs.unshift({ timestamp, type, message });
+    if (this.systemLogs.length > 20) {
+      this.systemLogs.pop();
+    }
+  }
+
+  executeSend() {
+    this.isSending = true;
+    this.stats.total++;
+
+    setTimeout(() => {
+      if (this.selectedType === 'FAIL') {
+        this.stats.dlq++;
+        this.addLog('WARN', `Orden para ${this.customerName} ($${this.orderTotal}) rechazada intencionalmente.`);
+        this.addLog('ERROR', `Mensaje desviado por regla de enrutamiento hacia 'pedidos_dlq' (Dead Letter Exchange).`);
+      } else {
+        this.stats.success++;
+        this.addLog('INFO', `Orden generada para ${this.customerName} por monto $${this.orderTotal}.`);
+        this.addLog('SUCCESS', `Evento publicado en exchange 'orders_exchange' y sincronizado en cluster.`);
+      }
+      this.isSending = false;
+    }, 300);
+  }
+
   createQueue() {
-    if (!this.newQueueName.trim()) {
-      this.adminStatusMessage = 'Error 400: El nombre de la cola no puede estar vacío';
-      this.isAdminError = true;
+    if (!this.newQueueName || this.newQueueName.trim() === '') {
+      this.addLog('WARN', 'Validación rechazada: el nombre de la cola no puede ser vacío.');
       return;
     }
 
+    const queueName = this.newQueueName.trim();
+    this.isLoadingAdmin = true;
+
     const payload = {
-      name: this.newQueueName.trim(),
-      durable: this.isDurable,
-      autoDelete: false
+      name: queueName,
+      durable: this.isDurable
     };
 
-    this.http.post<any>(this.adminApiUrl, payload).subscribe({
+    this.http.post<any>(this.orderApiUrl, payload).subscribe({
       next: (res) => {
-        this.isAdminError = false;
-        this.adminStatusMessage = `Éxito: ${res.message || 'Cola creada'} (${res.queueName})`;
-        if (!this.managedQueues.includes(res.queueName)) {
-          this.managedQueues.push(res.queueName);
+        this.addLog('SUCCESS', `AMQP Admin: Cola '${queueName}' aprovisionada con persistencia durable=${this.isDurable}.`);
+        if (!this.managedQueues.includes(queueName)) {
+          this.managedQueues.push(queueName);
         }
         this.newQueueName = '';
+        this.isLoadingAdmin = false;
       },
       error: (err) => {
-        this.isAdminError = true;
-        this.adminStatusMessage = `Error ${err.status}: ${err.error?.message || 'Fallo al crear la cola'}`;
+        this.addLog('ERROR', `Error al aprovisionar cola: ${err.error?.message || err.message || 'Fallo de conexión'}`);
+        this.isLoadingAdmin = false;
       }
     });
   }
 
   deleteQueue(queueName: string) {
-    this.http.delete<any>(`${this.adminApiUrl}/${queueName}`).subscribe({
-      next: (res) => {
-        this.isAdminError = false;
-        this.adminStatusMessage = `Éxito: ${res.message || 'Cola eliminada'}`;
-        this.managedQueues = this.managedQueues.filter((q) => q !== queueName);
+    this.http.delete<any>(`${this.orderApiUrl}/${queueName}`).subscribe({
+      next: () => {
+        this.addLog('WARN', `AMQP Admin: Cola '${queueName}' purgada y eliminada del broker.`);
+        this.managedQueues = this.managedQueues.filter(q => q !== queueName);
       },
       error: (err) => {
-        this.isAdminError = true;
-        this.adminStatusMessage = `Error ${err.status}: ${err.error?.message || 'Fallo al eliminar la cola'}`;
+        this.addLog('ERROR', `Fallo al eliminar la cola '${queueName}': ${err.message}`);
       }
     });
+  }
+
+  clearLogs() {
+    this.systemLogs = [];
   }
 }

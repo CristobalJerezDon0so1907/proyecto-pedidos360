@@ -38,6 +38,12 @@
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
         
+        <!-- Bean Validation (Necesario para @NotBlank y @Valid) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

@@ -1,9 +1,9 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners, APP_INITIALIZER } from '@angular/core';
+import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideAppInitializer, inject } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
-import { IPublicClientApplication } from '@azure/msal-browser';
 import {
   MSAL_INSTANCE,
+  MSAL_GUARD_CONFIG,
   MSAL_INTERCEPTOR_CONFIG,
   MsalInterceptor,
   MsalGuard,
@@ -12,19 +12,25 @@ import {
 } from '@azure/msal-angular';
 
 import { routes } from './app.routes';
-import { msalInstanceFactory, msalInterceptorConfigFactory } from './msal-config';
+import { msalInstanceFactory, msalGuardConfigFactory, msalInterceptorConfigFactory } from './msal-config';
 
-export function initializeMsal(instance: IPublicClientApplication) {
-  return () =>
-    instance.initialize().then(() =>
-      instance.handleRedirectPromise()
-        .then((result) => {
-          if (result?.accessToken) {
-            sessionStorage.setItem('debugToken', result.accessToken);
-          }
-        })
-        .catch((err) => console.error(err))
-    );
+// Inicializa MSAL y procesa la respuesta que llega de Azure después del login.
+async function initializeMsal(): Promise<void> {
+  const msal = inject(MsalService);
+  await msal.instance.initialize();
+  try {
+    const result = await msal.instance.handleRedirectPromise();
+    if (result?.account) {
+      msal.instance.setActiveAccount(result.account);
+    } else if (!msal.instance.getActiveAccount() && msal.instance.getAllAccounts().length > 0) {
+      msal.instance.setActiveAccount(msal.instance.getAllAccounts()[0]);
+    }
+    if (result?.accessToken) {
+      sessionStorage.setItem('debugToken', result.accessToken);
+    }
+  } catch (err) {
+    console.error('Error procesando el login de Azure:', err);
+  }
 }
 
 export const appConfig: ApplicationConfig = {
@@ -34,18 +40,14 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptorsFromDi()),
 
     { provide: MSAL_INSTANCE, useFactory: msalInstanceFactory },
+    { provide: MSAL_GUARD_CONFIG, useFactory: msalGuardConfigFactory },
     { provide: MSAL_INTERCEPTOR_CONFIG, useFactory: msalInterceptorConfigFactory },
     { provide: HTTP_INTERCEPTORS, useClass: MsalInterceptor, multi: true },
 
-    {
-      provide: APP_INITIALIZER,
-      useFactory: initializeMsal,
-      deps: [MSAL_INSTANCE],
-      multi: true
-    },
-
-    MsalGuard,
     MsalService,
-    MsalBroadcastService
+    MsalGuard,
+    MsalBroadcastService,
+
+    provideAppInitializer(initializeMsal)
   ]
 };

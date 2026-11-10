@@ -7,5 +7,6 @@ export const environment = {
     redirectUri: 'http://localhost:4200/',
     protectedResourceScopes: ['api://aae39c25-24f8-4511-9d6f-c9321ffb3feb/.default']
   },
+  orderServiceUrl: 'http://localhost:8081',
   apiBaseUrl: 'https://eeta77yl3c.execute-api.us-east-1.amazonaws.com/dev'
 };

@@ -1,10 +1,9 @@
-version: '3.8'
-
 services:
   # ================= RABBITMQ CLUSTER =================
   rabbitmq-1:
     image: rabbitmq:3.12-management-alpine
     container_name: rabbitmq-1
+    restart: unless-stopped
     hostname: rabbitmq-1
     ports:
       - "5672:5672"    # Puerto AMQP principal
@@ -20,6 +19,7 @@ services:
   rabbitmq-2:
     image: rabbitmq:3.12-management-alpine
     container_name: rabbitmq-2
+    restart: unless-stopped
     hostname: rabbitmq-2
     ports:
       - "5673:5672"    # Puerto AMQP secundario
@@ -38,6 +38,7 @@ services:
   order-db:
     image: mysql:8.0
     container_name: order-db
+    restart: unless-stopped
     ports:
       - "3307:3306"
     environment:
@@ -47,6 +48,7 @@ services:
   inventory-db:
     image: mysql:8.0
     container_name: inventory-db
+    restart: unless-stopped
     ports:
       - "3308:3306"
     environment:
@@ -56,6 +58,7 @@ services:
   shipment-db:
     image: mysql:8.0
     container_name: shipment-db
+    restart: unless-stopped
     ports:
       - "3309:3306"
     environment:
@@ -65,6 +68,7 @@ services:
   payment-db:
     image: mysql:8.0
     container_name: payment-db
+    restart: unless-stopped
     ports:
       - "3310:3306"
     environment:
@@ -75,6 +79,7 @@ services:
   order-service:
     build: ./backend/order
     container_name: order-service
+    restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
@@ -92,6 +97,7 @@ services:
   inventory-service:
     build: ./backend/inventory
     container_name: inventory-service
+    restart: unless-stopped
     ports:
       - "8082:8082"
     environment:
@@ -109,6 +115,7 @@ services:
   shipment-service:
     build: ./backend/shipment
     container_name: shipment-service
+    restart: unless-stopped
     ports:
       - "8083:8083"
     environment:
@@ -126,6 +133,7 @@ services:
   payment-service:
     build: ./backend/payment
     container_name: payment-service
+    restart: unless-stopped
     ports:
       - "8084:8084"
     environment:
@@ -143,13 +151,29 @@ services:
   bff-service:
     build: ./bff
     container_name: bff-service
+    restart: unless-stopped
     ports:
       - "8080:8080"
+    environment:
+      SERVICES_ORDER_URL: http://order-service:8081
+      SERVICES_INVENTORY_URL: http://inventory-service:8082
+      SERVICES_SHIPMENT_URL: http://shipment-service:8083
     depends_on:
       - order-service
       - inventory-service
       - shipment-service
       - payment-service
+
+  # ================= FRONTEND (Angular + Nginx) =================
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - order-service
+      - bff-service
 
 volumes:
   rabbitmq_data_1:

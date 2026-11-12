@@ -152,6 +152,18 @@ services:
       - payment-db
       - rabbitmq-1
 
+  # ===== Pipeline de eventos Kafka Streams (Evaluación 3 - Guía 3.2.2) =====
+  fraud-service:
+    build: ./backend/fraud
+    container_name: fraud-service
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      - kafka
+
   bff-service:
     build: ./bff
     container_name: bff-service
@@ -178,6 +190,7 @@ services:
     depends_on:
       - order-service
       - bff-service
+      - fraud-service
 
   # ================= KAFKA (Evaluación 3) =================
   zookeeper:

@@ -13,8 +13,8 @@ import org.springframework.kafka.support.serializer.JsonSerde;
 /**
  * PIPELINE DE EVENTOS (Kafka Streams)
  *
- *  pedidos-transacciones ──► [1. Filtro] ──► [2. Enriquecimiento] ──┬─► [3. Deteccion] ──► pedidos-alertas
- *                                                                   └─► [4. Agregacion] ──► pedidos-total-cliente
+ *  pedidos-transacciones -> [1. Filtro] -> [2. Enriquecimiento] -+-> [3. Deteccion]  -> pedidos-alertas
+ *                                                                +-> [4. Agregacion] -> pedidos-total-cliente
  */
 @Configuration
 public class PipelineTopology {
@@ -76,4 +76,13 @@ public class PipelineTopology {
                         (cliente, p, total) -> total + p.getMonto(),
                         Materialized.with(Serdes.String(), Serdes.Double()));
 
-        // SALIDA 2
+        // SALIDA 2 (Sink): total por cliente al topic pedidos-total-cliente
+        totalPorCliente.toStream()
+                .peek((cliente, total) -> System.out.printf(
+                        "[PIPELINE] Total acumulado de %s: $%,.0f CLP%n", cliente, total))
+                .mapValues(total -> String.format("{\"totalClp\": %.0f}", total))
+                .to(topicTotales, Produced.with(Serdes.String(), Serdes.String()));
+
+        return entrada;
+    }
+}

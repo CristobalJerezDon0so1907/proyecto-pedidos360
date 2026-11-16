@@ -1,22 +1,21 @@
 <div class="dashboard-shell">
-  <!-- Barra Superior de Navegación y Clúster -->
+  <!-- Barra Superior -->
   <header class="navbar-header">
     <div class="brand-group">
       <div class="brand-badge">
         <svg class="rabbit-svg" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.970-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4 7.58 4 4 7.58 4 12H1l4 4 4-4H6z"/>
+          <path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4 7.58 4 4 7.58 4 12H1l4 4 4-4H6z"/>
         </svg>
       </div>
       <div>
         <div class="title-row">
           <h1>Pedidos360</h1>
-          <span class="badge-version">v2.4 Clustered</span>
+          <span class="badge-version">v3.0 RabbitMQ + Kafka</span>
         </div>
-        <p class="subtitle">Consola de Orquestación & Mensajería Asíncrona (AMQP)</p>
+        <p class="subtitle">Consola de Orquestación · RabbitMQ (AMQP) · Apache Kafka · Kafka Streams</p>
       </div>
     </div>
 
-    <!-- Indicadores de Nodos en Vivo -->
     <div class="cluster-indicators">
       <div class="indicator-chip">
         <span class="status-pulse active"></span>
@@ -33,7 +32,6 @@
         <span class="chip-label">BFF Gateway</span>
         <span class="chip-port">:8080</span>
       </div>
-      <!-- NUEVO: usuario de Azure + cerrar sesión -->
       <div class="indicator-chip user" *ngIf="userName">
         <span class="chip-label">👤 {{ userName }}</span>
         <button (click)="logout()" class="btn-logout">Cerrar sesión</button>
@@ -41,74 +39,70 @@
     </div>
   </header>
 
-  <!-- Métricas Clave de Flujo -->
-  <section class="kpi-grid">
+  <!-- KPIs -->
+  <section class="kpi-grid kpi-4">
     <div class="kpi-card orders">
-      <div class="kpi-top">
-        <span class="kpi-tag">TOTAL EVENTOS</span>
-        <span class="kpi-icon">📦</span>
-      </div>
+      <div class="kpi-top"><span class="kpi-tag">RABBITMQ: EVENTOS</span><span class="kpi-icon">📦</span></div>
       <div class="kpi-value">{{ stats.total }}</div>
-      <div class="kpi-caption">Mensajes emitidos a <code>orders_exchange</code></div>
+      <div class="kpi-caption">Publicados en <code>orders.exchange</code></div>
     </div>
-
-    <div class="kpi-card success">
-      <div class="kpi-top">
-        <span class="kpi-tag">PROCESADOS OK</span>
-        <span class="kpi-icon">⚡</span>
-      </div>
-      <div class="kpi-value">{{ stats.success }}</div>
-      <div class="kpi-caption">Consumidos sin error por microservicios</div>
-    </div>
-
     <div class="kpi-card dlq">
-      <div class="kpi-top">
-        <span class="kpi-tag">DEAD LETTER QUEUE</span>
-        <span class="kpi-icon">🛡️</span>
-      </div>
+      <div class="kpi-top"><span class="kpi-tag">DEAD LETTER QUEUE</span><span class="kpi-icon">🛡️</span></div>
       <div class="kpi-value">{{ stats.dlq }}</div>
-      <div class="kpi-caption">Mensajes aislados para reintentos</div>
+      <div class="kpi-caption">Desviados a <code>orders.dlq</code></div>
+    </div>
+    <div class="kpi-card kafka">
+      <div class="kpi-top"><span class="kpi-tag">KAFKA: MENSAJES</span><span class="kpi-icon">⚡</span></div>
+      <div class="kpi-value">{{ stats.kafka }}</div>
+      <div class="kpi-caption">Enviados a <code>pedidos-eventos</code></div>
+    </div>
+    <div class="kpi-card success">
+      <div class="kpi-top"><span class="kpi-tag">ALERTAS DE FRAUDE</span><span class="kpi-icon">🚨</span></div>
+      <div class="kpi-value">{{ stats.alertas }}</div>
+      <div class="kpi-caption">Detectadas por Kafka Streams</div>
     </div>
   </section>
 
-  <!-- Paneles de Control Central -->
+  <!-- ================= RABBITMQ ================= -->
+  <h3 class="section-title"><span class="dot rabbit"></span> RabbitMQ · Mensajería asíncrona</h3>
   <div class="workspace-grid">
-    
-    <!-- Módulo 1: Emisor de Pedidos / Ruteo -->
     <section class="console-box">
       <div class="box-header">
         <div class="box-icon">🚀</div>
         <div>
           <h2>Emisor de Pedidos & Enrutamiento</h2>
-          <p>Publica eventos JSON directo al broker para probar flujos</p>
+          <p>Publica eventos reales en RabbitMQ a través del <code>order-service</code></p>
         </div>
       </div>
-
       <div class="form-row">
         <label>Nombre del Cliente</label>
         <input type="text" [(ngModel)]="customerName" placeholder="Ej: Cristobal Donoso" />
       </div>
-
       <div class="form-row">
         <label>Monto de la Orden ($ CLP)</label>
         <input type="number" [(ngModel)]="orderTotal" />
       </div>
-
       <div class="form-row">
         <label>Ruta de Entrega</label>
         <select [(ngModel)]="selectedType">
-          <option value="INFO">🟢 Flujo Estándar (Consumo inmediato)</option>
-          <option value="FAIL">🔴 Provocar Falla (Desviar a Dead Letter Queue)</option>
+          <option value="INFO">🟢 Flujo Estándar (orders.exchange → inventory.queue)</option>
+          <option value="FAIL">🔴 Provocar Falla (orders.dlx → orders.dlq)</option>
         </select>
       </div>
-
       <button (click)="executeSend()" [disabled]="isSending" class="btn-primary-glow">
         <span *ngIf="!isSending">Transmitir Evento al Broker</span>
         <span *ngIf="isSending">Enviando a RabbitMQ...</span>
       </button>
+      <div class="queue-stats">
+        <div class="queue-stat" *ngFor="let c of colas | keyvalue">
+          <code>{{ c.key }}</code>
+          <span>{{ c.value.mensajes }} en espera</span>
+          <span>{{ c.value.consumidores }} consumidor(es)</span>
+        </div>
+        <div class="queue-stat empty" *ngIf="(colas | keyvalue).length === 0">Consultando colas...</div>
+      </div>
     </section>
 
-    <!-- Módulo 2: Administrador Dinámico de Colas -->
     <section class="console-box">
       <div class="box-header">
         <div class="box-icon admin">⚙️</div>
@@ -117,12 +111,10 @@
           <p>Aprovisiona o destruye colas llamando a la API de <code>order-service</code></p>
         </div>
       </div>
-
       <div class="form-row">
         <label>Identificador / Nombre de la Cola</label>
         <input type="text" [(ngModel)]="newQueueName" placeholder="ej: cola_auditoria_pedidos" />
       </div>
-
       <div class="checkbox-wrapper">
         <label class="custom-check">
           <input type="checkbox" [(ngModel)]="isDurable" />
@@ -130,12 +122,10 @@
           <span class="check-text">Durable (Persistir en disco ante reinicio de nodos)</span>
         </label>
       </div>
-
       <button (click)="createQueue()" [disabled]="isLoadingAdmin" class="btn-accent-glow">
         <span *ngIf="!isLoadingAdmin">Declarar Cola en Clúster</span>
         <span *ngIf="isLoadingAdmin">Aprovisionando vía REST...</span>
       </button>
-
       <div class="managed-queues-wrapper">
         <div class="queues-title">Colas activas registradas:</div>
         <div class="queue-chips">
@@ -148,7 +138,399 @@
     </section>
   </div>
 
-  <!-- Terminal de Eventos en Tiempo Real -->
+  <!-- ================= KAFKA ================= -->
+  <h3 class="section-title"><span class="dot kafka"></span> Apache Kafka · Topics, particiones y offsets</h3>
+  <div class="workspace-grid">
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon">📨</div>
+        <div>
+          <h2>Productor Kafka</h2>
+          <p>Topic <code>pedidos-eventos</code> (3 particiones) · consumidor en <code>shipment-service</code></p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Mensaje</label>
+        <input type="text" [(ngModel)]="kafkaMensaje" placeholder="Ej: Paso1-Creada" />
+      </div>
+      <div class="form-row">
+        <label>Key (para "Con key")</label>
+        <input type="text" [(ngModel)]="kafkaKey" placeholder="Ej: orden-555" />
+      </div>
+      <div class="btn-row">
+        <button (click)="enviarKafka(false)" [disabled]="isSendingKafka" class="btn-accent-glow">Enviar sin key</button>
+        <button (click)="enviarKafka(true)" [disabled]="isSendingKafka" class="btn-primary-glow">Enviar con key</button>
+      </div>
+      <p class="hint">Sin key: reparto entre particiones 0, 1, 2 · Con key: siempre la misma partición (orden garantizado).</p>
+    </section>
+
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon admin">🧭</div>
+        <div>
+          <h2>¿Dónde cayó cada mensaje?</h2>
+          <p>Respuesta real de Kafka: partición y offset asignados</p>
+        </div>
+      </div>
+      <table class="data-table" *ngIf="kafkaEnvios.length > 0; else sinKafka">
+        <thead><tr><th>Partición</th><th>Offset</th><th>Key</th><th>Mensaje</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let e of kafkaEnvios">
+            <td><span class="part-badge" [ngClass]="'p' + e.particion">P{{ e.particion }}</span></td>
+            <td>{{ e.offset }}</td>
+            <td><code>{{ e.key }}</code></td>
+            <td>{{ e.mensaje }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #sinKafka><div class="log-empty">Aún no se envían mensajes a Kafka...</div></ng-template>
+    </section>
+  </div>
+
+  <!-- ================= KAFKA STREAMS ================= -->
+  <h3 class="section-title"><span class="dot streams"></span> Kafka Streams · Pipeline anti-fraude (fraud-service)</h3>
+  <div class="workspace-grid">
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon">🔎</div>
+        <div>
+          <h2>Simular Pedido</h2>
+          <p><code>pedidos-transacciones</code> → filtro → USD → detección → alertas / totales</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Cliente</label>
+        <input type="text" [(ngModel)]="pipeCliente" placeholder="Ej: juan" />
+      </div>
+      <div class="form-row">
+        <label>Monto ($ CLP)</label>
+        <input type="number" [(ngModel)]="pipeMonto" />
+      </div>
+      <div class="form-row">
+        <label>Canal</label>
+        <select [(ngModel)]="pipeCanal">
+          <option value="web">🌐 Web</option>
+          <option value="app">📱 App</option>
+          <option value="tienda">🏬 Tienda</option>
+        </select>
+      </div>
+      <button (click)="enviarPipeline()" [disabled]="isSendingPipe" class="btn-primary-glow">
+        <span *ngIf="!isSendingPipe">Enviar al Pipeline</span>
+        <span *ngIf="isSendingPipe">Enviando a Kafka...</span>
+      </button>
+      <p class="hint">&lt; $1.000 se ignora · &gt; $500.000 alerta MEDIA · &gt; $1.000.000 alerta ALTA</p>
+      <div class="queues-title totals-title">Total gastado por cliente (KTable):</div>
+      <table class="data-table" *ngIf="totales.length > 0; else sinTotales">
+        <tbody>
+          <tr *ngFor="let t of totales">
+            <td><code>{{ t.cliente }}</code></td>
+            <td class="num">{{ t.total | number:'1.0-0' }} CLP</td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #sinTotales><div class="log-empty">Sin pedidos procesados todavía...</div></ng-template>
+    </section>
+
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon admin">🚨</div>
+        <div>
+          <h2>Alertas de Fraude</h2>
+          <p>Topic de salida <code>pedidos-alertas</code> (se actualiza cada 3 s)</p>
+        </div>
+      </div>
+      <div class="alert-list" *ngIf="alertas.length > 0; else sinAlertas">
+        <div class="alert-card" *ngFor="let a of alertas" [ngClass]="a.severidad.toLowerCase()">
+          <div class="alert-top">
+            <span class="sev-badge">{{ a.severidad }}</span>
+            <code>{{ a.pedidoId }}</code>
+          </div>
+          <div class="alert-motivo">{{ a.motivo }}</div>
+          <div class="alert-meta">👤 {{ a.cliente }} · {{ a.montoClp | number:'1.0-0' }} CLP · US$ {{ a.montoUsd | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <ng-template #sinAlertas><div class="log-empty">Sin alertas. Prueba con un monto mayor a $500.000.</div></ng-template>
+    </section>
+  </div>
+
+  <!-- Terminal de Eventos -->
+  <section class="terminal-container">
+    <div class="terminal-bar">
+      <div class="terminal-left">
+        <span class="t-dot red"></span>
+        <span class="t-dot yellow"></span>
+        <span class="t-dot green"></span>
+        <span class="terminal-title">EVENT STREAM LOGS & MONITORING</span>
+      </div>
+      <button (click)="clearLogs()" class="btn-clear-term">Limpiar</button>
+    </div>
+    <div class="terminal-output">
+      <div *ngIf="systemLogs.length === 0" class="log-empty">No hay eventos en cola...</div>
+      <div *ngFor="let log of systemLogs" class="log-row" [ngClass]="log.type.toLowerCase()">
+        <span class="log-time">[{{ log.timestamp }}]</span>
+        <span class="log-badge">{{ log.type }}</span>
+        <span class="log-text">{{ log.message }}</span>
+      </div>
+    </div>
+  </section>
+</div>
+EOFcat > frontend/src/app/dashboard/dashboard.html <<'EOF'
+<div class="dashboard-shell">
+  <!-- Barra Superior -->
+  <header class="navbar-header">
+    <div class="brand-group">
+      <div class="brand-badge">
+        <svg class="rabbit-svg" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4 7.58 4 4 7.58 4 12H1l4 4 4-4H6z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="title-row">
+          <h1>Pedidos360</h1>
+          <span class="badge-version">v3.0 RabbitMQ + Kafka</span>
+        </div>
+        <p class="subtitle">Consola de Orquestación · RabbitMQ (AMQP) · Apache Kafka · Kafka Streams</p>
+      </div>
+    </div>
+
+    <div class="cluster-indicators">
+      <div class="indicator-chip">
+        <span class="status-pulse active"></span>
+        <span class="chip-label">rabbitmq-1</span>
+        <span class="chip-port">:5672</span>
+      </div>
+      <div class="indicator-chip">
+        <span class="status-pulse active"></span>
+        <span class="chip-label">rabbitmq-2</span>
+        <span class="chip-port">:5673</span>
+      </div>
+      <div class="indicator-chip bff">
+        <span class="status-pulse active"></span>
+        <span class="chip-label">BFF Gateway</span>
+        <span class="chip-port">:8080</span>
+      </div>
+      <div class="indicator-chip user" *ngIf="userName">
+        <span class="chip-label">👤 {{ userName }}</span>
+        <button (click)="logout()" class="btn-logout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- KPIs -->
+  <section class="kpi-grid kpi-4">
+    <div class="kpi-card orders">
+      <div class="kpi-top"><span class="kpi-tag">RABBITMQ: EVENTOS</span><span class="kpi-icon">📦</span></div>
+      <div class="kpi-value">{{ stats.total }}</div>
+      <div class="kpi-caption">Publicados en <code>orders.exchange</code></div>
+    </div>
+    <div class="kpi-card dlq">
+      <div class="kpi-top"><span class="kpi-tag">DEAD LETTER QUEUE</span><span class="kpi-icon">🛡️</span></div>
+      <div class="kpi-value">{{ stats.dlq }}</div>
+      <div class="kpi-caption">Desviados a <code>orders.dlq</code></div>
+    </div>
+    <div class="kpi-card kafka">
+      <div class="kpi-top"><span class="kpi-tag">KAFKA: MENSAJES</span><span class="kpi-icon">⚡</span></div>
+      <div class="kpi-value">{{ stats.kafka }}</div>
+      <div class="kpi-caption">Enviados a <code>pedidos-eventos</code></div>
+    </div>
+    <div class="kpi-card success">
+      <div class="kpi-top"><span class="kpi-tag">ALERTAS DE FRAUDE</span><span class="kpi-icon">🚨</span></div>
+      <div class="kpi-value">{{ stats.alertas }}</div>
+      <div class="kpi-caption">Detectadas por Kafka Streams</div>
+    </div>
+  </section>
+
+  <!-- ================= RABBITMQ ================= -->
+  <h3 class="section-title"><span class="dot rabbit"></span> RabbitMQ · Mensajería asíncrona</h3>
+  <div class="workspace-grid">
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon">🚀</div>
+        <div>
+          <h2>Emisor de Pedidos & Enrutamiento</h2>
+          <p>Publica eventos reales en RabbitMQ a través del <code>order-service</code></p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Nombre del Cliente</label>
+        <input type="text" [(ngModel)]="customerName" placeholder="Ej: Cristobal Donoso" />
+      </div>
+      <div class="form-row">
+        <label>Monto de la Orden ($ CLP)</label>
+        <input type="number" [(ngModel)]="orderTotal" />
+      </div>
+      <div class="form-row">
+        <label>Ruta de Entrega</label>
+        <select [(ngModel)]="selectedType">
+          <option value="INFO">🟢 Flujo Estándar (orders.exchange → inventory.queue)</option>
+          <option value="FAIL">🔴 Provocar Falla (orders.dlx → orders.dlq)</option>
+        </select>
+      </div>
+      <button (click)="executeSend()" [disabled]="isSending" class="btn-primary-glow">
+        <span *ngIf="!isSending">Transmitir Evento al Broker</span>
+        <span *ngIf="isSending">Enviando a RabbitMQ...</span>
+      </button>
+      <div class="queue-stats">
+        <div class="queue-stat" *ngFor="let c of colas | keyvalue">
+          <code>{{ c.key }}</code>
+          <span>{{ c.value.mensajes }} en espera</span>
+          <span>{{ c.value.consumidores }} consumidor(es)</span>
+        </div>
+        <div class="queue-stat empty" *ngIf="(colas | keyvalue).length === 0">Consultando colas...</div>
+      </div>
+    </section>
+
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon admin">⚙️</div>
+        <div>
+          <h2>Gestor Dinámico de Colas (AMQP)</h2>
+          <p>Aprovisiona o destruye colas llamando a la API de <code>order-service</code></p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Identificador / Nombre de la Cola</label>
+        <input type="text" [(ngModel)]="newQueueName" placeholder="ej: cola_auditoria_pedidos" />
+      </div>
+      <div class="checkbox-wrapper">
+        <label class="custom-check">
+          <input type="checkbox" [(ngModel)]="isDurable" />
+          <span class="checkmark-ui"></span>
+          <span class="check-text">Durable (Persistir en disco ante reinicio de nodos)</span>
+        </label>
+      </div>
+      <button (click)="createQueue()" [disabled]="isLoadingAdmin" class="btn-accent-glow">
+        <span *ngIf="!isLoadingAdmin">Declarar Cola en Clúster</span>
+        <span *ngIf="isLoadingAdmin">Aprovisionando vía REST...</span>
+      </button>
+      <div class="managed-queues-wrapper">
+        <div class="queues-title">Colas activas registradas:</div>
+        <div class="queue-chips">
+          <div *ngFor="let q of managedQueues" class="q-chip">
+            <code>{{ q }}</code>
+            <button (click)="deleteQueue(q)" class="btn-drop" title="Eliminar cola">×</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= KAFKA ================= -->
+  <h3 class="section-title"><span class="dot kafka"></span> Apache Kafka · Topics, particiones y offsets</h3>
+  <div class="workspace-grid">
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon">📨</div>
+        <div>
+          <h2>Productor Kafka</h2>
+          <p>Topic <code>pedidos-eventos</code> (3 particiones) · consumidor en <code>shipment-service</code></p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Mensaje</label>
+        <input type="text" [(ngModel)]="kafkaMensaje" placeholder="Ej: Paso1-Creada" />
+      </div>
+      <div class="form-row">
+        <label>Key (para "Con key")</label>
+        <input type="text" [(ngModel)]="kafkaKey" placeholder="Ej: orden-555" />
+      </div>
+      <div class="btn-row">
+        <button (click)="enviarKafka(false)" [disabled]="isSendingKafka" class="btn-accent-glow">Enviar sin key</button>
+        <button (click)="enviarKafka(true)" [disabled]="isSendingKafka" class="btn-primary-glow">Enviar con key</button>
+      </div>
+      <p class="hint">Sin key: reparto entre particiones 0, 1, 2 · Con key: siempre la misma partición (orden garantizado).</p>
+    </section>
+
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon admin">🧭</div>
+        <div>
+          <h2>¿Dónde cayó cada mensaje?</h2>
+          <p>Respuesta real de Kafka: partición y offset asignados</p>
+        </div>
+      </div>
+      <table class="data-table" *ngIf="kafkaEnvios.length > 0; else sinKafka">
+        <thead><tr><th>Partición</th><th>Offset</th><th>Key</th><th>Mensaje</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let e of kafkaEnvios">
+            <td><span class="part-badge" [ngClass]="'p' + e.particion">P{{ e.particion }}</span></td>
+            <td>{{ e.offset }}</td>
+            <td><code>{{ e.key }}</code></td>
+            <td>{{ e.mensaje }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #sinKafka><div class="log-empty">Aún no se envían mensajes a Kafka...</div></ng-template>
+    </section>
+  </div>
+
+  <!-- ================= KAFKA STREAMS ================= -->
+  <h3 class="section-title"><span class="dot streams"></span> Kafka Streams · Pipeline anti-fraude (fraud-service)</h3>
+  <div class="workspace-grid">
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon">🔎</div>
+        <div>
+          <h2>Simular Pedido</h2>
+          <p><code>pedidos-transacciones</code> → filtro → USD → detección → alertas / totales</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Cliente</label>
+        <input type="text" [(ngModel)]="pipeCliente" placeholder="Ej: juan" />
+      </div>
+      <div class="form-row">
+        <label>Monto ($ CLP)</label>
+        <input type="number" [(ngModel)]="pipeMonto" />
+      </div>
+      <div class="form-row">
+        <label>Canal</label>
+        <select [(ngModel)]="pipeCanal">
+          <option value="web">🌐 Web</option>
+          <option value="app">📱 App</option>
+          <option value="tienda">🏬 Tienda</option>
+        </select>
+      </div>
+      <button (click)="enviarPipeline()" [disabled]="isSendingPipe" class="btn-primary-glow">
+        <span *ngIf="!isSendingPipe">Enviar al Pipeline</span>
+        <span *ngIf="isSendingPipe">Enviando a Kafka...</span>
+      </button>
+      <p class="hint">&lt; $1.000 se ignora · &gt; $500.000 alerta MEDIA · &gt; $1.000.000 alerta ALTA</p>
+      <div class="queues-title totals-title">Total gastado por cliente (KTable):</div>
+      <table class="data-table" *ngIf="totales.length > 0; else sinTotales">
+        <tbody>
+          <tr *ngFor="let t of totales">
+            <td><code>{{ t.cliente }}</code></td>
+            <td class="num">{{ t.total | number:'1.0-0' }} CLP</td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #sinTotales><div class="log-empty">Sin pedidos procesados todavía...</div></ng-template>
+    </section>
+
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon admin">🚨</div>
+        <div>
+          <h2>Alertas de Fraude</h2>
+          <p>Topic de salida <code>pedidos-alertas</code> (se actualiza cada 3 s)</p>
+        </div>
+      </div>
+      <div class="alert-list" *ngIf="alertas.length > 0; else sinAlertas">
+        <div class="alert-card" *ngFor="let a of alertas" [ngClass]="a.severidad.toLowerCase()">
+          <div class="alert-top">
+            <span class="sev-badge">{{ a.severidad }}</span>
+            <code>{{ a.pedidoId }}</code>
+          </div>
+          <div class="alert-motivo">{{ a.motivo }}</div>
+          <div class="alert-meta">👤 {{ a.cliente }} · {{ a.montoClp | number:'1.0-0' }} CLP · US$ {{ a.montoUsd | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <ng-template #sinAlertas><div class="log-empty">Sin alertas. Prueba con un monto mayor a $500.000.</div></ng-template>
+    </section>
+  </div>
+
+  <!-- Terminal de Eventos -->
   <section class="terminal-container">
     <div class="terminal-bar">
       <div class="terminal-left">

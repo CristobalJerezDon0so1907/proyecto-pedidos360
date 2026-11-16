@@ -12,5 +12,6 @@ export const environment = {
   },
   // En la nube, Nginx redirige /order/... al order-service
   orderServiceUrl: '/order',
+  fraudServiceUrl: '/fraud',
   apiBaseUrl: 'https://eeta77yl3c.execute-api.us-east-1.amazonaws.com/dev/'
 };

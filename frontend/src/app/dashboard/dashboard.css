@@ -491,3 +491,68 @@
     grid-template-columns: 1fr;
   }
 }
+/* ================= Evaluación 3: RabbitMQ + Kafka en el dashboard ================= */
+.kpi-grid.kpi-4 { grid-template-columns: repeat(4, 1fr); }
+.kpi-card.kafka::before { background: #a855f7; }
+
+.section-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.04em;
+  color: #cbd5e1; margin: 8px 0 14px 4px; text-transform: uppercase;
+}
+.section-title .dot { width: 10px; height: 10px; border-radius: 50%; }
+.section-title .dot.rabbit  { background: #f97316; box-shadow: 0 0 8px #f97316; }
+.section-title .dot.kafka   { background: #a855f7; box-shadow: 0 0 8px #a855f7; }
+.section-title .dot.streams { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hint { font-size: 11.5px; color: #64748b; margin: 12px 0 0 0; }
+
+.queue-stats { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+.queue-stat {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; align-items: center;
+  background: rgba(2, 6, 23, 0.7); border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; color: #94a3b8;
+}
+.queue-stat code { color: #fb923c; font-family: 'JetBrains Mono', monospace; }
+.queue-stat.empty { display: block; font-style: italic; color: #475569; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.data-table th {
+  text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  color: #64748b; text-transform: uppercase; padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.data-table td { padding: 7px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: #cbd5e1; }
+.data-table td code { color: #c4b5fd; font-family: 'JetBrains Mono', monospace; }
+.data-table td.num { text-align: right; font-family: 'JetBrains Mono', monospace; color: #34d399; }
+
+.part-badge {
+  display: inline-block; min-width: 30px; text-align: center; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6px; border-radius: 6px;
+}
+.part-badge.p0 { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+.part-badge.p1 { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+.part-badge.p2 { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; }
+
+.totals-title { margin-top: 18px; }
+
+.alert-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; }
+.alert-card {
+  background: rgba(2, 6, 23, 0.7); border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid #f59e0b; border-radius: 10px; padding: 10px 12px;
+}
+.alert-card.alta { border-left-color: #ef4444; }
+.alert-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.alert-top code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #64748b; }
+.sev-badge {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.18); color: #fbbf24;
+}
+.alert-card.alta .sev-badge { background: rgba(239, 68, 68, 0.18); color: #f87171; }
+.alert-motivo { font-size: 13px; color: #e2e8f0; font-weight: 600; }
+.alert-meta { font-size: 12px; color: #94a3b8; margin-top: 3px; }
+
+@media (max-width: 860px) {
+  .kpi-grid.kpi-4 { grid-template-columns: 1fr 1fr; }
+}

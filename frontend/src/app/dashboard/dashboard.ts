@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -11,6 +11,28 @@ interface LogEntry {
   message: string;
 }
 
+interface KafkaEnvio {
+  topic: string;
+  particion: number;
+  offset: number;
+  key: string;
+  mensaje: string;
+}
+
+interface AlertaPedido {
+  pedidoId: string;
+  cliente: string;
+  montoClp: number;
+  montoUsd: number;
+  motivo: string;
+  severidad: 'ALTA' | 'MEDIA';
+}
+
+interface ColaStats {
+  mensajes: number;
+  consumidores: number;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -18,36 +40,49 @@ interface LogEntry {
   templateUrl: './dashboard.html',
   styleUrls: ['./dashboard.css']
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
   private msal = inject(MsalService);
 
-  // Usuario autenticado con Microsoft Entra ID
   userName: string = '';
 
-  // Estado del mensaje
+  // En la nube pasan por Nginx: /order/... y /fraud/...
+  private orderApi = environment.orderServiceUrl;
+  private fraudApi = environment.fraudServiceUrl;
+  private orderApiUrl = `${environment.orderServiceUrl}/api/admin/queues`;
+
+  // ===== RabbitMQ: emisor =====
   selectedType: string = 'INFO';
   customerName: string = 'Cliente Corporativo';
   orderTotal: number = 29990;
   isSending: boolean = false;
+  colas: Record<string, ColaStats> = {};
 
-  // Métricas
-  stats = {
-    total: 0,
-    success: 0,
-    dlq: 0
-  };
+  stats = { total: 0, success: 0, dlq: 0, kafka: 0, alertas: 0 };
 
-  // Administrador de Colas
+  // ===== RabbitMQ: administrador de colas =====
   newQueueName: string = '';
   isDurable: boolean = true;
   isLoadingAdmin: boolean = false;
   managedQueues: string[] = ['cola_auditoria_pedidos', 'pedidos_dlq'];
 
-  // Logs en tiempo real
+  // ===== Kafka: topic pedidos-eventos =====
+  kafkaMensaje: string = 'Paso1-Creada';
+  kafkaKey: string = 'orden-555';
+  isSendingKafka: boolean = false;
+  kafkaEnvios: KafkaEnvio[] = [];
+
+  // ===== Kafka Streams: pipeline anti-fraude =====
+  pipeCliente: string = 'juan';
+  pipeMonto: number = 1500000;
+  pipeCanal: string = 'web';
+  isSendingPipe: boolean = false;
+  alertas: AlertaPedido[] = [];
+  totales: { cliente: string; total: number }[] = [];
+
   systemLogs: LogEntry[] = [];
 
-  private orderApiUrl = `${environment.orderServiceUrl}/api/admin/queues`;
+  private refreshTimer?: ReturnType<typeof setInterval>;
 
   ngOnInit() {
     const account = this.msal.instance.getActiveAccount() ?? this.msal.instance.getAllAccounts()[0];
@@ -55,54 +90,683 @@ export class DashboardComponent implements OnInit {
     if (this.userName) {
       this.addLog('SUCCESS', `Sesión iniciada con Microsoft Entra ID: ${this.userName}.`);
     }
+    this.addLog('INFO', 'Dashboard conectado a RabbitMQ (order-service), Kafka (pedidos-eventos) y Kafka Streams (fraud-service).');
 
-    this.addLog('INFO', 'Cluster RabbitMQ inicializado en nodos rabbit@rabbitmq-1 y rabbit@rabbitmq-2.');
-    this.addLog('SUCCESS', 'Conexión con BFF (puerto 8080) y Order-Service (puerto 8081) activa.');
+    this.refrescar();
+    this.refreshTimer = setInterval(() => this.refrescar(), 3000);
+  }
+
+  ngOnDestroy() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+    }
   }
 
   addLog(type: 'INFO' | 'ERROR' | 'SUCCESS' | 'WARN', message: string) {
     const now = new Date();
     const timestamp = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
     this.systemLogs.unshift({ timestamp, type, message });
-    if (this.systemLogs.length > 20) {
+    if (this.systemLogs.length > 30) {
       this.systemLogs.pop();
     }
   }
 
-  executeSend() {
-    this.isSending = true;
-    this.stats.total++;
+  // Cada 3 s: estado de colas, alertas y totales
+  refrescar() {
+    this.http.get<Record<string, ColaStats>>(`${this.orderApi}/api/orders/messages/stats`).subscribe({
+      next: (res) => this.colas = res,
+      error: () => {}
+    });
 
-    setTimeout(() => {
-      if (this.selectedType === 'FAIL') {
-        this.stats.dlq++;
-        this.addLog('WARN', `Orden para ${this.customerName} ($${this.orderTotal}) rechazada intencionalmente.`);
-        this.addLog('ERROR', `Mensaje desviado por regla de enrutamiento hacia 'pedidos_dlq' (Dead Letter Exchange).`);
-      } else {
-        this.stats.success++;
-        this.addLog('INFO', `Orden generada para ${this.customerName} por monto $${this.orderTotal}.`);
-        this.addLog('SUCCESS', `Evento publicado en exchange 'orders_exchange' y sincronizado en cluster.`);
-      }
-      this.isSending = false;
-    }, 300);
+    this.http.get<AlertaPedido[]>(`${this.fraudApi}/api/pedidos/alertas`).subscribe({
+      next: (res) => {
+        if (res.length > this.alertas.length && this.alertas.length > 0) {
+          const nueva = res[0];
+          this.addLog('ERROR', `Kafka Streams: ALERTA ${nueva.severidad} - ${nueva.motivo} (${nueva.cliente}, US$${nueva.montoUsd}).`);
+        }
+        this.alertas = res;
+        this.stats.alertas = res.length;
+      },
+      error: () => {}
+    });
+
+    this.http.get<Record<string, number>>(`${this.fraudApi}/api/pedidos/totales`).subscribe({
+      next: (res) => this.totales = Object.entries(res).map(([cliente, total]) => ({ cliente, total })),
+      error: () => {}
+    });
   }
 
+  // ===== RabbitMQ: envío real =====
+  executeSend() {
+    this.isSending = true;
+    const payload = {
+      level: this.selectedType,
+      message: `Orden de ${this.customerName} por $${this.orderTotal}`
+    };
+
+    this.http.post(`${this.orderApi}/api/orders/messages/send`, payload, { responseType: 'text' }).subscribe({
+      next: (res) => {
+        this.stats.total++;
+        if (this.selectedType === 'FAIL') {
+          this.stats.dlq++;
+          this.addLog('WARN', `RabbitMQ: orden de ${this.customerName} ($${this.orderTotal}) rechazada intencionalmente.`);
+          this.addLog('ERROR', res);
+        } else {
+          this.stats.success++;
+          this.addLog('SUCCESS', `RabbitMQ: ${res} (orders.exchange -> inventory.queue).`);
+        }
+        this.isSending = false;
+        this.refrescar();
+      },
+      error: (err) => {
+        this.addLog('ERROR', `RabbitMQ: no se pudo publicar el evento (${err.status || 'sin conexión'}).`);
+        this.isSending = false;
+      }
+    });
+  }
+
+  // ===== Kafka: productor =====
+  enviarKafka(conKey: boolean) {
+    if (!this.kafkaMensaje.trim()) {
+      this.addLog('WARN', 'Kafka: el mensaje no puede estar vacío.');
+      return;
+    }
+    this.isSendingKafka = true;
+    const params: Record<string, string> = { message: this.kafkaMensaje.trim() };
+    if (conKey && this.kafkaKey.trim()) {
+      params['key'] = this.kafkaKey.trim();
+    }
+
+    this.http.get<KafkaEnvio>(`${this.orderApi}/api/kafka/send`, { params }).subscribe({
+      next: (res) => {
+        this.kafkaEnvios.unshift(res);
+        if (this.kafkaEnvios.length > 12) {
+          this.kafkaEnvios.pop();
+        }
+        this.stats.kafka++;
+        this.addLog('SUCCESS', `Kafka: '${res.mensaje}' -> ${res.topic} | partición ${res.particion} | offset ${res.offset} | key ${res.key}.`);
+        this.isSendingKafka = false;
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Kafka: no se pudo enviar el mensaje (${err.status || 'sin conexión'}).`);
+        this.isSendingKafka = false;
+      }
+    });
+  }
+
+  // ===== Kafka Streams: pedido al pipeline =====
+  enviarPipeline() {
+    if (!this.pipeCliente.trim() || !this.pipeMonto) {
+      this.addLog('WARN', 'Pipeline: completa cliente y monto.');
+      return;
+    }
+    this.isSendingPipe = true;
+    const pedido = { cliente: this.pipeCliente.trim(), monto: this.pipeMonto, canal: this.pipeCanal };
+
+    this.http.post(`${this.fraudApi}/api/pedidos/transaccion`, pedido, { responseType: 'text' }).subscribe({
+      next: (res) => {
+        this.addLog('INFO', `Kafka Streams: ${res}`);
+        if (this.pipeMonto < 1000) {
+          this.addLog('WARN', 'Pipeline: monto menor a $1.000, el filtro lo va a ignorar.');
+        }
+        this.isSendingPipe = false;
+        setTimeout(() => this.refrescar(), 1500);
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Pipeline: no se pudo enviar el pedido (${err.status || 'sin conexión'}).`);
+        this.isSendingPipe = false;
+      }
+    });
+  }
+
+  // ===== RabbitMQ: administrador de colas =====
   createQueue() {
     if (!this.newQueueName || this.newQueueName.trim() === '') {
       this.addLog('WARN', 'Validación rechazada: el nombre de la cola no puede ser vacío.');
       return;
     }
-
     const queueName = this.newQueueName.trim();
     this.isLoadingAdmin = true;
-
-    const payload = {
-      name: queueName,
-      durable: this.isDurable
-    };
+    const payload = { name: queueName, durable: this.isDurable };
 
     this.http.post<any>(this.orderApiUrl, payload).subscribe({
+      next: () => {
+        this.addLog('SUCCESS', `AMQP Admin: Cola '${queueName}' aprovisionada con persistencia durable=${this.isDurable}.`);
+        if (!this.managedQueues.includes(queueName)) {
+          this.managedQueues.push(queueName);
+        }
+        this.newQueueName = '';
+        this.isLoadingAdmin = false;
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Error al aprovisionar cola: ${err.error?.message || err.message || 'Fallo de conexión'}`);
+        this.isLoadingAdmin = false;
+      }
+    });
+  }
+
+  deleteQueue(queueName: string) {
+    this.http.delete<any>(`${this.orderApiUrl}/${queueName}`).subscribe({
+      next: () => {
+        this.addLog('WARN', `AMQP Admin: Cola '${queueName}' purgada y eliminada del broker.`);
+        this.managedQueues = this.managedQueues.filter(q => q !== queueName);
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Fallo al eliminar la cola '${queueName}': ${err.message}`);
+      }
+    });
+  }
+
+  logout() {
+    this.msal.logoutRedirect();
+  }
+
+  clearLogs() {
+    this.systemLogs = [];
+  }
+}
+EOFcat > frontend/src/app/dashboard/dashboard.ts <<'EOF'
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { MsalService } from '@azure/msal-angular';
+import { environment } from '../../environments/environment';
+
+interface LogEntry {
+  timestamp: string;
+  type: 'INFO' | 'ERROR' | 'SUCCESS' | 'WARN';
+  message: string;
+}
+
+interface KafkaEnvio {
+  topic: string;
+  particion: number;
+  offset: number;
+  key: string;
+  mensaje: string;
+}
+
+interface AlertaPedido {
+  pedidoId: string;
+  cliente: string;
+  montoClp: number;
+  montoUsd: number;
+  motivo: string;
+  severidad: 'ALTA' | 'MEDIA';
+}
+
+interface ColaStats {
+  mensajes: number;
+  consumidores: number;
+}
+
+@Component({
+  selector: 'app-dashboard',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './dashboard.html',
+  styleUrls: ['./dashboard.css']
+})
+export class DashboardComponent implements OnInit, OnDestroy {
+  private http = inject(HttpClient);
+  private msal = inject(MsalService);
+
+  userName: string = '';
+
+  // En la nube pasan por Nginx: /order/... y /fraud/...
+  private orderApi = environment.orderServiceUrl;
+  private fraudApi = environment.fraudServiceUrl;
+  private orderApiUrl = `${environment.orderServiceUrl}/api/admin/queues`;
+
+  // ===== RabbitMQ: emisor =====
+  selectedType: string = 'INFO';
+  customerName: string = 'Cliente Corporativo';
+  orderTotal: number = 29990;
+  isSending: boolean = false;
+  colas: Record<string, ColaStats> = {};
+
+  stats = { total: 0, success: 0, dlq: 0, kafka: 0, alertas: 0 };
+
+  // ===== RabbitMQ: administrador de colas =====
+  newQueueName: string = '';
+  isDurable: boolean = true;
+  isLoadingAdmin: boolean = false;
+  managedQueues: string[] = ['cola_auditoria_pedidos', 'pedidos_dlq'];
+
+  // ===== Kafka: topic pedidos-eventos =====
+  kafkaMensaje: string = 'Paso1-Creada';
+  kafkaKey: string = 'orden-555';
+  isSendingKafka: boolean = false;
+  kafkaEnvios: KafkaEnvio[] = [];
+
+  // ===== Kafka Streams: pipeline anti-fraude =====
+  pipeCliente: string = 'juan';
+  pipeMonto: number = 1500000;
+  pipeCanal: string = 'web';
+  isSendingPipe: boolean = false;
+  alertas: AlertaPedido[] = [];
+  totales: { cliente: string; total: number }[] = [];
+
+  systemLogs: LogEntry[] = [];
+
+  private refreshTimer?: ReturnType<typeof setInterval>;
+
+  ngOnInit() {
+    const account = this.msal.instance.getActiveAccount() ?? this.msal.instance.getAllAccounts()[0];
+    this.userName = account?.name ?? account?.username ?? '';
+    if (this.userName) {
+      this.addLog('SUCCESS', `Sesión iniciada con Microsoft Entra ID: ${this.userName}.`);
+    }
+    this.addLog('INFO', 'Dashboard conectado a RabbitMQ (order-service), Kafka (pedidos-eventos) y Kafka Streams (fraud-service).');
+
+    this.refrescar();
+    this.refreshTimer = setInterval(() => this.refrescar(), 3000);
+  }
+
+  ngOnDestroy() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+    }
+  }
+
+  addLog(type: 'INFO' | 'ERROR' | 'SUCCESS' | 'WARN', message: string) {
+    const now = new Date();
+    const timestamp = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+    this.systemLogs.unshift({ timestamp, type, message });
+    if (this.systemLogs.length > 30) {
+      this.systemLogs.pop();
+    }
+  }
+
+  // Cada 3 s: estado de colas, alertas y totales
+  refrescar() {
+    this.http.get<Record<string, ColaStats>>(`${this.orderApi}/api/orders/messages/stats`).subscribe({
+      next: (res) => this.colas = res,
+      error: () => {}
+    });
+
+    this.http.get<AlertaPedido[]>(`${this.fraudApi}/api/pedidos/alertas`).subscribe({
       next: (res) => {
+        if (res.length > this.alertas.length && this.alertas.length > 0) {
+          const nueva = res[0];
+          this.addLog('ERROR', `Kafka Streams: ALERTA ${nueva.severidad} - ${nueva.motivo} (${nueva.cliente}, US$${nueva.montoUsd}).`);
+        }
+        this.alertas = res;
+        this.stats.alertas = res.length;
+      },
+      error: () => {}
+    });
+
+    this.http.get<Record<string, number>>(`${this.fraudApi}/api/pedidos/totales`).subscribe({
+      next: (res) => this.totales = Object.entries(res).map(([cliente, total]) => ({ cliente, total })),
+      error: () => {}
+    });
+  }
+
+  // ===== RabbitMQ: envío real =====
+  executeSend() {
+    this.isSending = true;
+    const payload = {
+      level: this.selectedType,
+      message: `Orden de ${this.customerName} por $${this.orderTotal}`
+    };
+
+    this.http.post(`${this.orderApi}/api/orders/messages/send`, payload, { responseType: 'text' }).subscribe({
+      next: (res) => {
+        this.stats.total++;
+        if (this.selectedType === 'FAIL') {
+          this.stats.dlq++;
+          this.addLog('WARN', `RabbitMQ: orden de ${this.customerName} ($${this.orderTotal}) rechazada intencionalmente.`);
+          this.addLog('ERROR', res);
+        } else {
+          this.stats.success++;
+          this.addLog('SUCCESS', `RabbitMQ: ${res} (orders.exchange -> inventory.queue).`);
+        }
+        this.isSending = false;
+        this.refrescar();
+      },
+      error: (err) => {
+        this.addLog('ERROR', `RabbitMQ: no se pudo publicar el evento (${err.status || 'sin conexión'}).`);
+        this.isSending = false;
+      }
+    });
+  }
+
+  // ===== Kafka: productor =====
+  enviarKafka(conKey: boolean) {
+    if (!this.kafkaMensaje.trim()) {
+      this.addLog('WARN', 'Kafka: el mensaje no puede estar vacío.');
+      return;
+    }
+    this.isSendingKafka = true;
+    const params: Record<string, string> = { message: this.kafkaMensaje.trim() };
+    if (conKey && this.kafkaKey.trim()) {
+      params['key'] = this.kafkaKey.trim();
+    }
+
+    this.http.get<KafkaEnvio>(`${this.orderApi}/api/kafka/send`, { params }).subscribe({
+      next: (res) => {
+        this.kafkaEnvios.unshift(res);
+        if (this.kafkaEnvios.length > 12) {
+          this.kafkaEnvios.pop();
+        }
+        this.stats.kafka++;
+        this.addLog('SUCCESS', `Kafka: '${res.mensaje}' -> ${res.topic} | partición ${res.particion} | offset ${res.offset} | key ${res.key}.`);
+        this.isSendingKafka = false;
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Kafka: no se pudo enviar el mensaje (${err.status || 'sin conexión'}).`);
+        this.isSendingKafka = false;
+      }
+    });
+  }
+
+  // ===== Kafka Streams: pedido al pipeline =====
+  enviarPipeline() {
+    if (!this.pipeCliente.trim() || !this.pipeMonto) {
+      this.addLog('WARN', 'Pipeline: completa cliente y monto.');
+      return;
+    }
+    this.isSendingPipe = true;
+    const pedido = { cliente: this.pipeCliente.trim(), monto: this.pipeMonto, canal: this.pipeCanal };
+
+    this.http.post(`${this.fraudApi}/api/pedidos/transaccion`, pedido, { responseType: 'text' }).subscribe({
+      next: (res) => {
+        this.addLog('INFO', `Kafka Streams: ${res}`);
+        if (this.pipeMonto < 1000) {
+          this.addLog('WARN', 'Pipeline: monto menor a $1.000, el filtro lo va a ignorar.');
+        }
+        this.isSendingPipe = false;
+        setTimeout(() => this.refrescar(), 1500);
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Pipeline: no se pudo enviar el pedido (${err.status || 'sin conexión'}).`);
+        this.isSendingPipe = false;
+      }
+    });
+  }
+
+  // ===== RabbitMQ: administrador de colas =====
+  createQueue() {
+    if (!this.newQueueName || this.newQueueName.trim() === '') {
+      this.addLog('WARN', 'Validación rechazada: el nombre de la cola no puede ser vacío.');
+      return;
+    }
+    const queueName = this.newQueueName.trim();
+    this.isLoadingAdmin = true;
+    const payload = { name: queueName, durable: this.isDurable };
+
+    this.http.post<any>(this.orderApiUrl, payload).subscribe({
+      next: () => {
+        this.addLog('SUCCESS', `AMQP Admin: Cola '${queueName}' aprovisionada con persistencia durable=${this.isDurable}.`);
+        if (!this.managedQueues.includes(queueName)) {
+          this.managedQueues.push(queueName);
+        }
+        this.newQueueName = '';
+        this.isLoadingAdmin = false;
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Error al aprovisionar cola: ${err.error?.message || err.message || 'Fallo de conexión'}`);
+        this.isLoadingAdmin = false;
+      }
+    });
+  }
+
+  deleteQueue(queueName: string) {
+    this.http.delete<any>(`${this.orderApiUrl}/${queueName}`).subscribe({
+      next: () => {
+        this.addLog('WARN', `AMQP Admin: Cola '${queueName}' purgada y eliminada del broker.`);
+        this.managedQueues = this.managedQueues.filter(q => q !== queueName);
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Fallo al eliminar la cola '${queueName}': ${err.message}`);
+      }
+    });
+  }
+
+  logout() {
+    this.msal.logoutRedirect();
+  }
+
+  clearLogs() {
+    this.systemLogs = [];
+  }
+}
+EOFcat > frontend/src/app/dashboard/dashboard.ts <<'EOF'
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { MsalService } from '@azure/msal-angular';
+import { environment } from '../../environments/environment';
+
+interface LogEntry {
+  timestamp: string;
+  type: 'INFO' | 'ERROR' | 'SUCCESS' | 'WARN';
+  message: string;
+}
+
+interface KafkaEnvio {
+  topic: string;
+  particion: number;
+  offset: number;
+  key: string;
+  mensaje: string;
+}
+
+interface AlertaPedido {
+  pedidoId: string;
+  cliente: string;
+  montoClp: number;
+  montoUsd: number;
+  motivo: string;
+  severidad: 'ALTA' | 'MEDIA';
+}
+
+interface ColaStats {
+  mensajes: number;
+  consumidores: number;
+}
+
+@Component({
+  selector: 'app-dashboard',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './dashboard.html',
+  styleUrls: ['./dashboard.css']
+})
+export class DashboardComponent implements OnInit, OnDestroy {
+  private http = inject(HttpClient);
+  private msal = inject(MsalService);
+
+  userName: string = '';
+
+  // En la nube pasan por Nginx: /order/... y /fraud/...
+  private orderApi = environment.orderServiceUrl;
+  private fraudApi = environment.fraudServiceUrl;
+  private orderApiUrl = `${environment.orderServiceUrl}/api/admin/queues`;
+
+  // ===== RabbitMQ: emisor =====
+  selectedType: string = 'INFO';
+  customerName: string = 'Cliente Corporativo';
+  orderTotal: number = 29990;
+  isSending: boolean = false;
+  colas: Record<string, ColaStats> = {};
+
+  stats = { total: 0, success: 0, dlq: 0, kafka: 0, alertas: 0 };
+
+  // ===== RabbitMQ: administrador de colas =====
+  newQueueName: string = '';
+  isDurable: boolean = true;
+  isLoadingAdmin: boolean = false;
+  managedQueues: string[] = ['cola_auditoria_pedidos', 'pedidos_dlq'];
+
+  // ===== Kafka: topic pedidos-eventos =====
+  kafkaMensaje: string = 'Paso1-Creada';
+  kafkaKey: string = 'orden-555';
+  isSendingKafka: boolean = false;
+  kafkaEnvios: KafkaEnvio[] = [];
+
+  // ===== Kafka Streams: pipeline anti-fraude =====
+  pipeCliente: string = 'juan';
+  pipeMonto: number = 1500000;
+  pipeCanal: string = 'web';
+  isSendingPipe: boolean = false;
+  alertas: AlertaPedido[] = [];
+  totales: { cliente: string; total: number }[] = [];
+
+  systemLogs: LogEntry[] = [];
+
+  private refreshTimer?: ReturnType<typeof setInterval>;
+
+  ngOnInit() {
+    const account = this.msal.instance.getActiveAccount() ?? this.msal.instance.getAllAccounts()[0];
+    this.userName = account?.name ?? account?.username ?? '';
+    if (this.userName) {
+      this.addLog('SUCCESS', `Sesión iniciada con Microsoft Entra ID: ${this.userName}.`);
+    }
+    this.addLog('INFO', 'Dashboard conectado a RabbitMQ (order-service), Kafka (pedidos-eventos) y Kafka Streams (fraud-service).');
+
+    this.refrescar();
+    this.refreshTimer = setInterval(() => this.refrescar(), 3000);
+  }
+
+  ngOnDestroy() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+    }
+  }
+
+  addLog(type: 'INFO' | 'ERROR' | 'SUCCESS' | 'WARN', message: string) {
+    const now = new Date();
+    const timestamp = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+    this.systemLogs.unshift({ timestamp, type, message });
+    if (this.systemLogs.length > 30) {
+      this.systemLogs.pop();
+    }
+  }
+
+  // Cada 3 s: estado de colas, alertas y totales
+  refrescar() {
+    this.http.get<Record<string, ColaStats>>(`${this.orderApi}/api/orders/messages/stats`).subscribe({
+      next: (res) => this.colas = res,
+      error: () => {}
+    });
+
+    this.http.get<AlertaPedido[]>(`${this.fraudApi}/api/pedidos/alertas`).subscribe({
+      next: (res) => {
+        if (res.length > this.alertas.length && this.alertas.length > 0) {
+          const nueva = res[0];
+          this.addLog('ERROR', `Kafka Streams: ALERTA ${nueva.severidad} - ${nueva.motivo} (${nueva.cliente}, US$${nueva.montoUsd}).`);
+        }
+        this.alertas = res;
+        this.stats.alertas = res.length;
+      },
+      error: () => {}
+    });
+
+    this.http.get<Record<string, number>>(`${this.fraudApi}/api/pedidos/totales`).subscribe({
+      next: (res) => this.totales = Object.entries(res).map(([cliente, total]) => ({ cliente, total })),
+      error: () => {}
+    });
+  }
+
+  // ===== RabbitMQ: envío real =====
+  executeSend() {
+    this.isSending = true;
+    const payload = {
+      level: this.selectedType,
+      message: `Orden de ${this.customerName} por $${this.orderTotal}`
+    };
+
+    this.http.post(`${this.orderApi}/api/orders/messages/send`, payload, { responseType: 'text' }).subscribe({
+      next: (res) => {
+        this.stats.total++;
+        if (this.selectedType === 'FAIL') {
+          this.stats.dlq++;
+          this.addLog('WARN', `RabbitMQ: orden de ${this.customerName} ($${this.orderTotal}) rechazada intencionalmente.`);
+          this.addLog('ERROR', res);
+        } else {
+          this.stats.success++;
+          this.addLog('SUCCESS', `RabbitMQ: ${res} (orders.exchange -> inventory.queue).`);
+        }
+        this.isSending = false;
+        this.refrescar();
+      },
+      error: (err) => {
+        this.addLog('ERROR', `RabbitMQ: no se pudo publicar el evento (${err.status || 'sin conexión'}).`);
+        this.isSending = false;
+      }
+    });
+  }
+
+  // ===== Kafka: productor =====
+  enviarKafka(conKey: boolean) {
+    if (!this.kafkaMensaje.trim()) {
+      this.addLog('WARN', 'Kafka: el mensaje no puede estar vacío.');
+      return;
+    }
+    this.isSendingKafka = true;
+    const params: Record<string, string> = { message: this.kafkaMensaje.trim() };
+    if (conKey && this.kafkaKey.trim()) {
+      params['key'] = this.kafkaKey.trim();
+    }
+
+    this.http.get<KafkaEnvio>(`${this.orderApi}/api/kafka/send`, { params }).subscribe({
+      next: (res) => {
+        this.kafkaEnvios.unshift(res);
+        if (this.kafkaEnvios.length > 12) {
+          this.kafkaEnvios.pop();
+        }
+        this.stats.kafka++;
+        this.addLog('SUCCESS', `Kafka: '${res.mensaje}' -> ${res.topic} | partición ${res.particion} | offset ${res.offset} | key ${res.key}.`);
+        this.isSendingKafka = false;
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Kafka: no se pudo enviar el mensaje (${err.status || 'sin conexión'}).`);
+        this.isSendingKafka = false;
+      }
+    });
+  }
+
+  // ===== Kafka Streams: pedido al pipeline =====
+  enviarPipeline() {
+    if (!this.pipeCliente.trim() || !this.pipeMonto) {
+      this.addLog('WARN', 'Pipeline: completa cliente y monto.');
+      return;
+    }
+    this.isSendingPipe = true;
+    const pedido = { cliente: this.pipeCliente.trim(), monto: this.pipeMonto, canal: this.pipeCanal };
+
+    this.http.post(`${this.fraudApi}/api/pedidos/transaccion`, pedido, { responseType: 'text' }).subscribe({
+      next: (res) => {
+        this.addLog('INFO', `Kafka Streams: ${res}`);
+        if (this.pipeMonto < 1000) {
+          this.addLog('WARN', 'Pipeline: monto menor a $1.000, el filtro lo va a ignorar.');
+        }
+        this.isSendingPipe = false;
+        setTimeout(() => this.refrescar(), 1500);
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Pipeline: no se pudo enviar el pedido (${err.status || 'sin conexión'}).`);
+        this.isSendingPipe = false;
+      }
+    });
+  }
+
+  // ===== RabbitMQ: administrador de colas =====
+  createQueue() {
+    if (!this.newQueueName || this.newQueueName.trim() === '') {
+      this.addLog('WARN', 'Validación rechazada: el nombre de la cola no puede ser vacío.');
+      return;
+    }
+    const queueName = this.newQueueName.trim();
+    this.isLoadingAdmin = true;
+    const payload = { name: queueName, durable: this.isDurable };
+
+    this.http.post<any>(this.orderApiUrl, payload).subscribe({
+      next: () => {
         this.addLog('SUCCESS', `AMQP Admin: Cola '${queueName}' aprovisionada con persistencia durable=${this.isDurable}.`);
         if (!this.managedQueues.includes(queueName)) {
           this.managedQueues.push(queueName);

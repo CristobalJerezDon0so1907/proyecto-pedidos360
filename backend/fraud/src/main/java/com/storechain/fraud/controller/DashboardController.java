@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 // Lee las salidas del pipeline (pedidos-alertas y pedidos-total-cliente) y las expone para el dashboard
 @RestController
 @RequestMapping("/api/pedidos")
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = {"http://localhost:4200", "https://qk0i5plkz5.execute-api.us-east-1.amazonaws.com"})
 public class DashboardController {
 
     private static final int MAX_ALERTAS = 20;

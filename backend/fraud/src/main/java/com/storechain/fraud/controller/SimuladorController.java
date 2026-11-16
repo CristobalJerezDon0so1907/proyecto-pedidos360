@@ -15,7 +15,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/pedidos")
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = {"http://localhost:4200", "https://qk0i5plkz5.execute-api.us-east-1.amazonaws.com"})
 public class SimuladorController {
 
     private final KafkaTemplate<String, Pedido> kafkaTemplate;

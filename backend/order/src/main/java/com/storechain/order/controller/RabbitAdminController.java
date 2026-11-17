@@ -20,6 +20,19 @@ public class RabbitAdminController {
         this.rabbitAdminService = rabbitAdminService;
     }
 
+    // Lista las colas reales del broker (nombre, mensajes, consumidores, si es de sistema)
+    @GetMapping
+    public ResponseEntity<?> listQueues() {
+        try {
+            return ResponseEntity.ok(rabbitAdminService.listQueues());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
+                    "status", "ERROR",
+                    "message", "No se pudo consultar RabbitMQ Management: " + e.getMessage()
+            ));
+        }
+    }
+
     @PostMapping
     public ResponseEntity<?> createQueue(@Valid @RequestBody CreateQueueRequest request) {
         try {
@@ -39,6 +52,12 @@ public class RabbitAdminController {
 
     @DeleteMapping("/{queueName}")
     public ResponseEntity<?> deleteQueue(@PathVariable String queueName) {
+        if (rabbitAdminService.esColaSistema(queueName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "status", "FORBIDDEN",
+                    "message", "La cola '" + queueName + "' la usan los microservicios y no se puede eliminar"
+            ));
+        }
         try {
             boolean deleted = rabbitAdminService.deleteQueue(queueName);
             if (deleted) {

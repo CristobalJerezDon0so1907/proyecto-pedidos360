@@ -81,6 +81,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   totales: { cliente: string; total: number }[] = [];
 
   systemLogs: LogEntry[] = [];
+  colasRabbit: any[] = [];
 
   // ===== Guía 3.3.2: prueba de carga y consumer lag =====
   cargaCantidad: number = 100000;
@@ -120,6 +121,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Cada 3 s: estado de colas, alertas y totales
   refrescar() {
+    this.cargarColas();
     this.refrescarLag();
     this.http.get<Record<string, ColaStats>>(`${this.orderApi}/api/orders/messages/stats`).subscribe({
       next: (res) => this.colas = res,
@@ -244,6 +246,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.managedQueues.push(queueName);
         }
         this.newQueueName = '';
+        this.cargarColas();
         this.isLoadingAdmin = false;
       },
       error: (err) => {
@@ -254,13 +257,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   deleteQueue(queueName: string) {
+    if (!confirm(`¿Eliminar la cola '${queueName}' de RabbitMQ?`)) {
+      return;
+    }
     this.http.delete<any>(`${this.orderApiUrl}/${queueName}`).subscribe({
       next: () => {
         this.addLog('WARN', `AMQP Admin: Cola '${queueName}' purgada y eliminada del broker.`);
-        this.managedQueues = this.managedQueues.filter(q => q !== queueName);
+        this.cargarColas();
       },
       error: (err) => {
-        this.addLog('ERROR', `Fallo al eliminar la cola '${queueName}': ${err.message}`);
+        this.addLog('ERROR', `Fallo al eliminar la cola '${queueName}': ${err.error?.message || err.message}`);
       }
     });
   }
@@ -298,6 +304,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return 0;
     }
     return Math.round(this.lagInfo.lagTotal * 100 / this.lagMaximo);
+  }
+
+  cargarColas() {
+    this.http.get<any[]>(this.orderApiUrl).subscribe({
+      next: (res) => this.colasRabbit = res,
+      error: () => {}
+    });
   }
 
   logout() {

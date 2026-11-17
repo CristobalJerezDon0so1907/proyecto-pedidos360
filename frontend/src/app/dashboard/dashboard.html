@@ -129,11 +129,11 @@
         <span *ngIf="isLoadingAdmin">Aprovisionando vía REST...</span>
       </button>
       <div class="managed-queues-wrapper">
-        <div class="queues-title">Colas activas registradas:</div>
+        <div class="queues-title">Colas en RabbitMQ ({{ colasRabbit.length }}):</div>
         <div class="queue-chips">
-          <div *ngFor="let q of managedQueues" class="q-chip">
-            <code>{{ q }}</code>
-            <button (click)="deleteQueue(q)" class="btn-drop" title="Eliminar cola">×</button>
+          <div *ngFor="let q of colasRabbit" class="q-chip" [class.sistema]="q.sistema">
+            <code>{{ q.name }}</code><span class="q-count">{{ q.mensajes }} msg</span>
+            <button *ngIf="!q.sistema" (click)="deleteQueue(q.name)" class="btn-drop" title="Eliminar cola">×</button><span *ngIf="q.sistema" class="q-lock" title="Cola usada por los microservicios">🔒</span>
           </div>
         </div>
       </div>

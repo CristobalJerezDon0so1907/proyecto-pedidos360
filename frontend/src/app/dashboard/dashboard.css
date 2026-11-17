@@ -571,3 +571,18 @@
 .lag-big span { font-size: 12px; color: #94a3b8; }
 .lag-bar { height: 8px; background: rgba(255, 255, 255, 0.06); border-radius: 9999px; overflow: hidden; margin-bottom: 14px; }
 .lag-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #ef4444); transition: width 0.5s ease; }
+
+/* ================= Botones a los paneles de RabbitMQ y Kafka ================= */
+.btn-tool {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 700;
+  text-decoration: none; transition: all 0.2s ease;
+}
+.btn-tool.rabbit {
+  background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.45);
+}
+.btn-tool.rabbit:hover { background: rgba(249, 115, 22, 0.3); color: #ffffff; }
+.btn-tool.kafka {
+  background: rgba(168, 85, 247, 0.15); color: #c4b5fd; border: 1px solid rgba(168, 85, 247, 0.45);
+}
+.btn-tool.kafka:hover { background: rgba(168, 85, 247, 0.3); color: #ffffff; }

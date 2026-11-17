@@ -129,6 +129,7 @@ services:
       SPRING_RABBITMQ_USERNAME: admin
       SPRING_RABBITMQ_PASSWORD: admin123
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_KAFKA_CARGA_CONCURRENCIA: ${CARGA_CONCURRENCIA:-1}
     depends_on:
       - shipment-db
       - rabbitmq-1

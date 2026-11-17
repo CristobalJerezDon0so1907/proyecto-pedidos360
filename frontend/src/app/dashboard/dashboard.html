@@ -254,6 +254,61 @@
   </div>
 
   <!-- Terminal de Eventos -->
+  <!-- ================= TUNING Y PRUEBAS DE CARGA (Guía 3.3.2) ================= -->
+  <h3 class="section-title"><span class="dot carga"></span> Kafka · Tuning y pruebas de carga</h3>
+  <div class="workspace-grid">
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon">🏋️</div>
+        <div>
+          <h2>Generador de Carga (Tracking GPS)</h2>
+          <p>Topic <code>tracking-despachos</code> · retención 5 min / 50 MB</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Cantidad de eventos (máx. 500.000)</label>
+        <input type="number" [(ngModel)]="cargaCantidad" />
+      </div>
+      <button (click)="lanzarCarga()" [disabled]="isCargando" class="btn-primary-glow">
+        <span *ngIf="!isCargando">Lanzar Prueba de Carga</span>
+        <span *ngIf="isCargando">Inundando Kafka...</span>
+      </button>
+      <div class="carga-result" *ngIf="cargaResultado">
+        <div class="mini-stat"><span>Mensajes</span><strong>{{ cargaResultado.mensajes | number }}</strong></div>
+        <div class="mini-stat"><span>Tiempo</span><strong>{{ cargaResultado.msConfirmado | number }} ms</strong></div>
+        <div class="mini-stat"><span>Throughput</span><strong>{{ cargaResultado.throughputMsgSeg | number }} msg/s</strong></div>
+      </div>
+      <p class="hint">Productor optimizado: batch.size 32 KB · linger.ms 20 · compresión lz4 · buffer 64 MB</p>
+    </section>
+
+    <section class="console-box">
+      <div class="box-header">
+        <div class="box-icon admin">🐢</div>
+        <div>
+          <h2>Consumer Lag (analytics-group)</h2>
+          <p>Consumidor lento en <code>shipment-service</code>: 10 ms por mensaje (~100 msg/s)</p>
+        </div>
+      </div>
+      <div class="lag-big">
+        <strong>{{ (lagInfo?.lagTotal ?? 0) | number }}</strong>
+        <span>mensajes pendientes</span>
+      </div>
+      <div class="lag-bar"><div class="lag-fill" [style.width.%]="porcentajeLag()"></div></div>
+      <table class="data-table" *ngIf="lagInfo">
+        <thead><tr><th>Partición</th><th>Último offset</th><th>Leído</th><th>Lag</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let p of lagInfo.particiones">
+            <td><span class="part-badge" [ngClass]="'p' + p.particion">P{{ p.particion }}</span></td>
+            <td>{{ p.ultimoOffset | number }}</td>
+            <td>{{ p.leido | number }}</td>
+            <td class="num">{{ p.lag | number }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint">Para bajar el lag más rápido: más consumidores en el grupo (máximo útil = 3, igual que las particiones).</p>
+    </section>
+  </div>
+
   <section class="terminal-container">
     <div class="terminal-bar">
       <div class="terminal-left">

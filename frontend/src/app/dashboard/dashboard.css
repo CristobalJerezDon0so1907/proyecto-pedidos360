@@ -556,3 +556,18 @@
 @media (max-width: 860px) {
   .kpi-grid.kpi-4 { grid-template-columns: 1fr 1fr; }
 }
+
+/* ================= Guía 3.3.2: pruebas de carga ================= */
+.section-title .dot.carga { background: #22d3ee; box-shadow: 0 0 8px #22d3ee; }
+.carga-result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px; }
+.mini-stat {
+  background: rgba(2, 6, 23, 0.7); border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 4px;
+}
+.mini-stat span { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+.mini-stat strong { font-size: 16px; color: #22d3ee; font-family: 'JetBrains Mono', monospace; }
+.lag-big { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.lag-big strong { font-size: 34px; font-weight: 800; color: #fbbf24; font-family: 'JetBrains Mono', monospace; }
+.lag-big span { font-size: 12px; color: #94a3b8; }
+.lag-bar { height: 8px; background: rgba(255, 255, 255, 0.06); border-radius: 9999px; overflow: hidden; margin-bottom: 14px; }
+.lag-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #ef4444); transition: width 0.5s ease; }

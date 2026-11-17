@@ -82,6 +82,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   systemLogs: LogEntry[] = [];
 
+  // ===== Guía 3.3.2: prueba de carga y consumer lag =====
+  cargaCantidad: number = 100000;
+  isCargando: boolean = false;
+  cargaResultado: any = null;
+  lagInfo: any = null;
+  lagMaximo: number = 0;
+
   private refreshTimer?: ReturnType<typeof setInterval>;
 
   ngOnInit() {
@@ -113,6 +120,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Cada 3 s: estado de colas, alertas y totales
   refrescar() {
+    this.refrescarLag();
     this.http.get<Record<string, ColaStats>>(`${this.orderApi}/api/orders/messages/stats`).subscribe({
       next: (res) => this.colas = res,
       error: () => {}
@@ -255,6 +263,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.addLog('ERROR', `Fallo al eliminar la cola '${queueName}': ${err.message}`);
       }
     });
+  }
+
+  lanzarCarga() {
+    this.isCargando = true;
+    this.lagMaximo = 0;
+    this.addLog('WARN', `Prueba de carga: enviando ${this.cargaCantidad} eventos de tracking a Kafka...`);
+    this.http.get<any>(`${this.orderApi}/api/test/start`, { params: { count: String(this.cargaCantidad) } }).subscribe({
+      next: (res) => {
+        this.cargaResultado = res;
+        this.addLog('SUCCESS', `Carga completada: ${res.mensajes} mensajes en ${res.msConfirmado} ms (${res.throughputMsgSeg} msg/s).`);
+        this.isCargando = false;
+        this.refrescarLag();
+      },
+      error: (err) => {
+        this.addLog('ERROR', `Prueba de carga fallida (${err.status || 'sin conexión'}).`);
+        this.isCargando = false;
+      }
+    });
+  }
+
+  refrescarLag() {
+    this.http.get<any>(`${this.orderApi}/api/test/lag`).subscribe({
+      next: (res) => {
+        this.lagInfo = res;
+        this.lagMaximo = Math.max(this.lagMaximo, res.lagTotal);
+      },
+      error: () => {}
+    });
+  }
+
+  porcentajeLag(): number {
+    if (!this.lagInfo || this.lagMaximo === 0) {
+      return 0;
+    }
+    return Math.round(this.lagInfo.lagTotal * 100 / this.lagMaximo);
   }
 
   logout() {

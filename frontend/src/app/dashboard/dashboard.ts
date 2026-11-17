@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -43,6 +43,8 @@ interface ColaStats {
 export class DashboardComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
   private msal = inject(MsalService);
+  private cdr = inject(ChangeDetectorRef);
+  private renderTimer?: ReturnType<typeof setInterval>;
 
   userName: string = '';
 
@@ -102,9 +104,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.refrescar();
     this.refreshTimer = setInterval(() => this.refrescar(), 3000);
+    // App zoneless: avisar a Angular que redibuje cuando llegan datos HTTP
+    this.renderTimer = setInterval(() => this.cdr.markForCheck(), 500);
   }
 
   ngOnDestroy() {
+    clearInterval(this.renderTimer);
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
     }
